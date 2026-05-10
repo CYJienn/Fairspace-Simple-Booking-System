@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -14,6 +16,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   Calendar,
   Clock,
@@ -27,6 +38,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Plus,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -113,6 +125,15 @@ export default function BookingsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [activeTab, setActiveTab] = useState("upcoming")
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [requestForm, setRequestForm] = useState({
+    room: "",
+    date: "",
+    startTime: "",
+    endTime: "",
+    durationHours: "",
+    reason: "",
+  })
 
   const filteredBookings = allBookings.filter((booking) => {
     const matchesSearch = booking.room.toLowerCase().includes(searchQuery.toLowerCase())
@@ -135,12 +156,102 @@ export default function BookingsPage() {
             View and manage your study room reservations.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/calendar">
-            <Calendar className="mr-2 h-4 w-4" />
-            New Booking
-          </Link>
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Plus className="mr-2 h-4 w-4" />
+                Request > 3 Hours
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>Extended Booking Request</DialogTitle>
+                <DialogDescription>
+                  Submit a request if you need to book more than 3 hours. Admins will review it.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="request-room">Room</Label>
+                  <Input
+                    id="request-room"
+                    placeholder="e.g., Collaboration Hub"
+                    value={requestForm.room}
+                    onChange={(e) => setRequestForm({ ...requestForm, room: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="request-date">Date</Label>
+                    <Input
+                      id="request-date"
+                      type="date"
+                      value={requestForm.date}
+                      onChange={(e) => setRequestForm({ ...requestForm, date: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="request-duration">Duration (hours)</Label>
+                    <Input
+                      id="request-duration"
+                      type="number"
+                      min="3.5"
+                      step="0.5"
+                      placeholder="4"
+                      value={requestForm.durationHours}
+                      onChange={(e) => setRequestForm({ ...requestForm, durationHours: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="request-start">Start time</Label>
+                    <Input
+                      id="request-start"
+                      type="time"
+                      value={requestForm.startTime}
+                      onChange={(e) => setRequestForm({ ...requestForm, startTime: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="request-end">End time</Label>
+                    <Input
+                      id="request-end"
+                      type="time"
+                      value={requestForm.endTime}
+                      onChange={(e) => setRequestForm({ ...requestForm, endTime: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="request-reason">Reason</Label>
+                  <Textarea
+                    id="request-reason"
+                    rows={3}
+                    placeholder="Why do you need more than 3 hours?"
+                    value={requestForm.reason}
+                    onChange={(e) => setRequestForm({ ...requestForm, reason: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setRequestOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={() => setRequestOpen(false)}>
+                  Submit Request
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Button asChild>
+            <Link href="/dashboard/calendar">
+              <Calendar className="mr-2 h-4 w-4" />
+              New Booking
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

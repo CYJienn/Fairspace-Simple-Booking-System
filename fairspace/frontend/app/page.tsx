@@ -16,7 +16,6 @@ import {
   X,
   Zap,
   Building2,
-  Star,
 } from "lucide-react"
 
 const features = [
@@ -52,27 +51,6 @@ const features = [
   },
 ]
 
-const testimonials = [
-  {
-    name: "Sarah Chen",
-    role: "Computer Science Student",
-    content: "FairSpace has completely changed how our study group operates. No more double bookings or room hunting!",
-    avatar: "SC",
-  },
-  {
-    name: "Dr. Michael Torres",
-    role: "Faculty Administrator",
-    content: "The analytics dashboard gives us insights we never had before. Room utilization improved by 40%.",
-    avatar: "MT",
-  },
-  {
-    name: "Aisha Patel",
-    role: "Student Council President",
-    content: "Finally, a fair system that everyone trusts. The reporting feature keeps everyone accountable.",
-    avatar: "AP",
-  },
-]
-
 const stats = [
   { value: "50K+", label: "Bookings Made" },
   { value: "98%", label: "Check-in Rate" },
@@ -101,12 +79,6 @@ export default function LandingPage() {
               <Link href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Features
               </Link>
-              <Link href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Testimonials
-              </Link>
-              <Link href="#demo" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Demo
-              </Link>
             </div>
 
             <div className="hidden md:flex items-center gap-3">
@@ -134,12 +106,6 @@ export default function LandingPage() {
             <div className="px-4 py-4 space-y-3">
               <Link href="#features" className="block text-sm text-muted-foreground hover:text-foreground">
                 Features
-              </Link>
-              <Link href="#testimonials" className="block text-sm text-muted-foreground hover:text-foreground">
-                Testimonials
-              </Link>
-              <Link href="#demo" className="block text-sm text-muted-foreground hover:text-foreground">
-                Demo
               </Link>
               <div className="pt-3 border-t border-border space-y-2">
                 <Button variant="ghost" className="w-full justify-start" asChild>
@@ -176,65 +142,6 @@ export default function LandingPage() {
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
-              <Button size="lg" variant="outline" className="w-full sm:w-auto" asChild>
-                <Link href="/dashboard">View Demo</Link>
-              </Button>
-            </div>
-          </div>
-
-          {/* Dashboard Preview */}
-          <div id="demo" className="mt-20 relative">
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-10 pointer-events-none h-full" />
-            <div className="rounded-2xl border border-border bg-card shadow-2xl shadow-primary/5 overflow-hidden">
-              <div className="bg-muted/50 px-4 py-3 border-b border-border flex items-center gap-2">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-destructive/60" />
-                  <div className="w-3 h-3 rounded-full bg-warning/60" />
-                  <div className="w-3 h-3 rounded-full bg-success/60" />
-                </div>
-                <div className="flex-1 flex justify-center">
-                  <div className="px-4 py-1 rounded-lg bg-background text-xs text-muted-foreground">
-                    fairspace.university.edu/dashboard
-                  </div>
-                </div>
-              </div>
-              <div className="p-6 bg-muted/30">
-                <div className="grid grid-cols-4 gap-4 mb-6">
-                  {[
-                    { label: "Today's Bookings", value: "12", trend: "+3" },
-                    { label: "Available Rooms", value: "8", trend: "of 15" },
-                    { label: "Check-in Rate", value: "94%", trend: "+2%" },
-                    { label: "Active Users", value: "234", trend: "+12" },
-                  ].map((stat, i) => (
-                    <div key={i} className="p-4 rounded-xl bg-card border border-border">
-                      <p className="text-xs text-muted-foreground">{stat.label}</p>
-                      <div className="flex items-baseline gap-2 mt-1">
-                        <span className="text-2xl font-semibold">{stat.value}</span>
-                        <span className="text-xs text-success">{stat.trend}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-7 gap-2">
-                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-                    <div key={day} className="text-center">
-                      <p className="text-xs text-muted-foreground mb-2">{day}</p>
-                      <div className="space-y-1">
-                        {[...Array(4)].map((_, i) => (
-                          <div
-                            key={i}
-                            className={`h-8 rounded-lg ${
-                              Math.random() > 0.5
-                                ? "bg-primary/20 border border-primary/30"
-                                : "bg-muted border border-border"
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -278,44 +185,6 @@ export default function LandingPage() {
                   </div>
                   <h3 className="text-lg font-semibold mb-2">{feature.title}</h3>
                   <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials Section */}
-      <section id="testimonials" className="py-24 px-4 sm:px-6 lg:px-8 bg-muted/30">
-        <div className="mx-auto max-w-7xl">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-balance">
-              Loved by students and administrators
-            </h2>
-            <p className="mt-4 text-lg text-muted-foreground">
-              See what our users have to say about FairSpace.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((testimonial, i) => (
-              <Card key={i} className="border-border/50 bg-card">
-                <CardContent className="p-6">
-                  <div className="flex gap-1 mb-4">
-                    {[...Array(5)].map((_, j) => (
-                      <Star key={j} className="h-4 w-4 fill-warning text-warning" />
-                    ))}
-                  </div>
-                  <p className="text-foreground mb-6 leading-relaxed">{`"${testimonial.content}"`}</p>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium">
-                      {testimonial.avatar}
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">{testimonial.name}</p>
-                      <p className="text-xs text-muted-foreground">{testimonial.role}</p>
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
             ))}
