@@ -1,0 +1,13 @@
+{
+  "name": "fairspace-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "db:run": "node scripts/run-sql.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "pg": "^8.16.0"
+  }
+}

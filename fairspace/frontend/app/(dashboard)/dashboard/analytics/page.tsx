@@ -99,11 +99,11 @@ const hourlyData = [
 ]
 
 const roomUtilization = [
-  { name: "Discussion Room A", value: 85, color: "hsl(var(--chart-1))" },
-  { name: "Study Pod B", value: 72, color: "hsl(var(--chart-2))" },
-  { name: "Collaboration Hub", value: 90, color: "hsl(var(--chart-3))" },
-  { name: "Meeting Room 101", value: 65, color: "hsl(var(--chart-4))" },
-  { name: "Quiet Study Zone", value: 58, color: "hsl(var(--chart-5))" },
+  { name: "Discussion Room A", value: 85, color: "var(--chart-1)" },
+  { name: "Study Pod B", value: 72, color: "var(--chart-2)" },
+  { name: "Collaboration Hub", value: 90, color: "var(--chart-3)" },
+  { name: "Meeting Room 101", value: 65, color: "var(--chart-4)" },
+  { name: "Quiet Study Zone", value: 58, color: "var(--chart-5)" },
 ]
 
 const topRooms = [
@@ -193,8 +193,8 @@ export default function AnalyticsPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="day" className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                  <XAxis dataKey="day" className="text-xs" tick={{ fill: 'var(--muted-foreground)' }} />
+                  <YAxis className="text-xs" tick={{ fill: 'var(--muted-foreground)' }} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: 'hsl(var(--card))',
@@ -205,7 +205,7 @@ export default function AnalyticsPage() {
                   <Area
                     type="monotone"
                     dataKey="bookings"
-                    stroke="hsl(var(--chart-1))"
+                    stroke="var(--chart-1)"
                     fillOpacity={1}
                     fill="url(#colorBookings)"
                     strokeWidth={2}
@@ -214,7 +214,7 @@ export default function AnalyticsPage() {
                   <Area
                     type="monotone"
                     dataKey="checkins"
-                    stroke="hsl(var(--chart-2))"
+                    stroke="var(--chart-2)"
                     fillOpacity={1}
                     fill="url(#colorCheckins)"
                     strokeWidth={2}
@@ -225,11 +225,11 @@ export default function AnalyticsPage() {
             </div>
             <div className="flex items-center justify-center gap-6 mt-4">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(var(--chart-1))' }} />
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'var(--chart-1)' }} />
                 <span className="text-sm text-muted-foreground">Bookings</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(var(--chart-2))' }} />
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'var(--chart-2)' }} />
                 <span className="text-sm text-muted-foreground">Check-ins</span>
               </div>
             </div>
@@ -249,8 +249,8 @@ export default function AnalyticsPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={hourlyData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="hour" className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis className="text-xs" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                  <XAxis dataKey="hour" className="text-xs" tick={{ fill: 'var(--muted-foreground)' }} />
+                  <YAxis className="text-xs" tick={{ fill: 'var(--muted-foreground)' }} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: 'hsl(var(--card))',
@@ -260,7 +260,7 @@ export default function AnalyticsPage() {
                   />
                   <Bar
                     dataKey="bookings"
-                    fill="hsl(var(--chart-1))"
+                    fill="var(--chart-1)"
                     radius={[4, 4, 0, 0]}
                     name="Bookings"
                   />

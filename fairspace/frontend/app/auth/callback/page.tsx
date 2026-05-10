@@ -1,0 +1,94 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { createBrowserClient } from "@/lib/supabase/browser-client"
+import { Button } from "@/components/ui/button"
+
+export default function AuthCallbackPage() {
+  const router = useRouter()
+  const [status, setStatus] = useState("Finishing sign-in...")
+
+  useEffect(() => {
+    const run = async () => {
+      const supabase = createBrowserClient()
+      const params = new URLSearchParams(window.location.search)
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""))
+      const errorParam = params.get("error") || hashParams.get("error")
+      const errorDescription = params.get("error_description") || hashParams.get("error_description")
+      const errorCode = params.get("error_code") || hashParams.get("error_code")
+
+      if (errorParam || errorDescription || errorCode) {
+        const details = [errorParam, errorCode, errorDescription].filter(Boolean).join(" | ")
+        setStatus(details || "Sign-in failed. Please try again.")
+        return
+      }
+      const code = params.get("code")
+
+      if (!code) {
+        const accessToken = hashParams.get("access_token")
+        const refreshToken = hashParams.get("refresh_token")
+
+        if (accessToken || refreshToken) {
+          if (!accessToken || !refreshToken) {
+            setStatus("Missing tokens in URL. Please try signing in again.")
+            return
+          }
+
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+
+          if (error) {
+            setStatus(error.message)
+            return
+          }
+
+          if (!data.session) {
+            setStatus("Sign-in completed, but no session was created. Please try again.")
+            return
+          }
+
+          router.replace("/dashboard")
+          return
+        }
+
+        setStatus("Missing auth code. Please try signing in again.")
+        return
+      }
+
+      const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+      if (exchangeError) {
+        setStatus(exchangeError.message)
+        return
+      }
+
+      if (!exchangeData?.session) {
+        setStatus("Sign-in completed, but no session was created. Please try again.")
+        return
+      }
+
+      router.replace("/dashboard")
+    }
+
+    run().catch((error) => {
+      setStatus(error?.message || "Sign-in failed. Please try again.")
+    })
+  }, [router])
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="text-center space-y-4">
+        <p className="text-sm text-muted-foreground">{status}</p>
+        {status !== "Finishing sign-in..." && (
+          <Button asChild>
+            <Link href="/login">Back to sign in</Link>
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}

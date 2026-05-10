@@ -61,6 +61,7 @@ const pendingRequests = [
     date: "May 12, 2026",
     time: "9:00 AM - 12:00 PM",
     duration: "3 hours",
+    durationHours: 3,
     reason: "Faculty workshop with 15 participants",
     status: "pending",
   },
@@ -73,6 +74,7 @@ const pendingRequests = [
     date: "May 15, 2026",
     time: "2:00 PM - 6:00 PM",
     duration: "4 hours",
+    durationHours: 4,
     reason: "Student organization planning meeting",
     status: "pending",
   },
@@ -145,6 +147,7 @@ const reports = [
     date: "May 9, 2026",
     description: "Loud music and conversation disrupting nearby study areas.",
     status: "resolved",
+    anonymous: true,
   },
   {
     id: 2,
@@ -154,6 +157,7 @@ const reports = [
     date: "May 8, 2026",
     description: "10 people in a 4-person pod, blocking the hallway.",
     status: "investigating",
+    anonymous: false,
   },
   {
     id: 3,
@@ -163,6 +167,7 @@ const reports = [
     date: "May 7, 2026",
     description: "Group using room without any booking during peak hours.",
     status: "pending",
+    anonymous: false,
   },
 ]
 
@@ -187,6 +192,8 @@ const statusColors = {
 
 export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const overLimitRequests = pendingRequests.filter((request) => request.durationHours > 3)
+  const anonymousReports = reports.filter((report) => report.anonymous)
 
   return (
     <div className="space-y-6">
@@ -195,7 +202,7 @@ export default function AdminPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Panel</h1>
           <p className="text-muted-foreground mt-1">
-            Manage users, rooms, and review reports.
+            Review anonymous reports and special booking requests.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -204,6 +211,31 @@ export default function AdminPage() {
             Admin Access
           </Badge>
         </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Card className="border-border/50">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Over 3-hour Requests</p>
+              <p className="text-xl font-semibold">{overLimitRequests.length}</p>
+            </div>
+            <Badge variant="secondary" className="bg-warning/10 text-warning border-0">
+              Pending Review
+            </Badge>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Anonymous Reports</p>
+              <p className="text-xl font-semibold">{anonymousReports.length}</p>
+            </div>
+            <Badge variant="secondary" className="bg-primary/10 text-primary border-0">
+              Open
+            </Badge>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Quick Stats */}

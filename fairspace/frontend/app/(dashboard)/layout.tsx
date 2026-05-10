@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -49,8 +50,12 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const [role, setRole] = useState<"student" | "admin">("student")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const visibleNavigation = role === "admin"
+    ? navigation
+    : navigation.filter((item) => item.href !== "/dashboard/admin")
 
   return (
     <div className="min-h-screen bg-background">
@@ -94,7 +99,7 @@ export default function DashboardLayout({
 
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
+            {visibleNavigation.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
               return (
                 <Link
@@ -156,8 +161,11 @@ export default function DashboardLayout({
                 <Menu className="h-5 w-5" />
               </button>
               <h1 className="text-lg font-semibold hidden sm:block">
-                {navigation.find((item) => pathname === item.href || pathname.startsWith(item.href + "/"))?.name || "Dashboard"}
+                {visibleNavigation.find((item) => pathname === item.href || pathname.startsWith(item.href + "/"))?.name || "Dashboard"}
               </h1>
+              <Badge variant="outline" className="hidden sm:inline-flex capitalize">
+                {role}
+              </Badge>
             </div>
 
             <div className="flex items-center gap-2">
@@ -181,6 +189,11 @@ export default function DashboardLayout({
                       <p className="text-xs text-muted-foreground">sarah@university.edu</p>
                     </div>
                   </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setRole(role === "admin" ? "student" : "admin")}>
+                    <Shield className="mr-2 h-4 w-4" />
+                    Switch to {role === "admin" ? "Student" : "Admin"}
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
                     <Settings className="mr-2 h-4 w-4" />
