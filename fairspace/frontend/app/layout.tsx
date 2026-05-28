@@ -2,15 +2,14 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
-import { ThemeProvider } from '@/components/theme-provider'
-import { Toaster } from '@/components/ui/sonner'
+import { AppProviders } from '@/components/app-providers'
 
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'FairSpace - Smart Study Room Booking',
-  description: 'Fair and smart study room booking for universities. Prevent booking abuse, improve accountability, and manage campus resources fairly.',
+  title: 'FairSpace AI - Internship Interview Booking',
+  description: 'An AI-assisted booking system demo for internship hiring teams to schedule rooms, coordinate candidates, explain trade-offs, and manage admin review.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -39,15 +38,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-background" suppressHydrationWarning>
       <body className="font-sans antialiased min-h-screen">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
+        <AppProviders>
           {children}
-          <Toaster richColors closeButton />
-        </ThemeProvider>
+        </AppProviders>
 
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

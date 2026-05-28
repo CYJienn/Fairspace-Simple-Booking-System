@@ -7,14 +7,16 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createBrowserClient } from "@/lib/supabase/browser-client"
-import { Building2, Eye, EyeOff, ArrowLeft, Loader2 } from "lucide-react"
+import { createBrowserClient, hasBrowserSupabaseConfig } from "@/lib/supabase/browser-client"
+import { Building2, Eye, EyeOff, ArrowLeft, Loader2, ShieldCheck, GraduationCap } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
+  const [role, setRole] = useState<"student" | "admin">("student")
+  const isSupabaseReady = hasBrowserSupabaseConfig()
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -24,6 +26,12 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
     setErrorMessage("")
+
+    if (!isSupabaseReady) {
+      setErrorMessage("Supabase public keys are missing. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local, then restart pnpm dev.")
+      setIsLoading(false)
+      return
+    }
 
     const supabase = createBrowserClient()
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -43,12 +51,19 @@ export default function LoginPage() {
       return
     }
 
-    router.push("/dashboard")
+    window.localStorage.setItem("fairspace-role", role)
+    router.push("/")
   }
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
     setErrorMessage("")
+    if (!isSupabaseReady) {
+      setErrorMessage("Supabase public keys are missing. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local, then restart pnpm dev.")
+      setIsLoading(false)
+      return
+    }
+
     const supabase = createBrowserClient()
     const redirectTo = `${window.location.origin}/auth/callback`
 
@@ -91,10 +106,31 @@ export default function LoginPage() {
             <CardHeader className="text-center pb-4">
               <CardTitle className="text-2xl">Welcome back</CardTitle>
               <CardDescription>
-                Sign in to your account to continue
+                Choose your portal, then sign in to continue
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
+                <Button
+                  type="button"
+                  variant={role === "student" ? "default" : "ghost"}
+                  className="h-11"
+                  onClick={() => setRole("student")}
+                >
+                  <GraduationCap className="mr-2 h-4 w-4" />
+                  Student
+                </Button>
+                <Button
+                  type="button"
+                  variant={role === "admin" ? "default" : "ghost"}
+                  className="h-11"
+                  onClick={() => setRole("admin")}
+                >
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  Admin
+                </Button>
+              </div>
+
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -143,7 +179,7 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full h-11" disabled={isLoading}>
+                <Button type="submit" className="w-full h-11" disabled={isLoading || !isSupabaseReady}>
                   {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -159,6 +195,12 @@ export default function LoginPage() {
                 <p className="text-sm text-destructive text-center">{errorMessage}</p>
               )}
 
+              {!isSupabaseReady && !errorMessage && (
+                <p className="text-sm text-destructive text-center">
+                  Supabase public keys are missing in .env.local.
+                </p>
+              )}
+
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-border" />
@@ -169,7 +211,7 @@ export default function LoginPage() {
               </div>
 
               <div className="grid grid-cols-1 gap-3">
-                <Button variant="outline" className="h-11" type="button" onClick={handleGoogleSignIn}>
+                <Button variant="outline" className="h-11" type="button" onClick={handleGoogleSignIn} disabled={isLoading || !isSupabaseReady}>
                   <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
                     <path
                       fill="currentColor"

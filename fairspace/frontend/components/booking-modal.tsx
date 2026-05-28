@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -21,41 +21,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import {
-  Calendar,
-  Clock,
-  Users,
-  DoorOpen,
-  X,
-  AlertCircle,
-  CheckCircle2,
-  Loader2,
-  Info,
-} from "lucide-react"
+import { Calendar, CheckCircle2, Clock, Info, Loader2, Users, X } from "lucide-react"
 import { format } from "date-fns"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-
-const rooms = [
-  { id: "room-a", name: "Discussion Room A", capacity: 8 },
-  { id: "room-b", name: "Study Pod B", capacity: 4 },
-  { id: "room-c", name: "Collaboration Hub", capacity: 12 },
-  { id: "room-d", name: "Meeting Room 101", capacity: 6 },
-  { id: "room-e", name: "Quiet Study Zone", capacity: 2 },
-]
-
-const timeOptions = [
-  "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM",
-  "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM", "1:00 PM", "1:30 PM",
-  "2:00 PM", "2:30 PM", "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM",
-  "5:00 PM", "5:30 PM", "6:00 PM", "6:30 PM", "7:00 PM", "7:30 PM",
-  "8:00 PM",
-]
+import { dateStringFromDate, timeSlots } from "@/lib/booking-data"
+import { useBookingStore } from "@/lib/booking-store"
 
 const durationOptions = [
   { value: "30", label: "30 minutes" },
   { value: "60", label: "1 hour" },
   { value: "90", label: "1.5 hours" },
-  { value: "120", label: "2 hours (max)" },
+  { value: "120", label: "2 hours" },
 ]
 
 interface BookingModalProps {
@@ -63,6 +40,7 @@ interface BookingModalProps {
   onOpenChange: (open: boolean) => void
   selectedDate?: Date
   selectedTime?: string
+  defaultRoomId?: string
 }
 
 export function BookingModal({
@@ -70,43 +48,77 @@ export function BookingModal({
   onOpenChange,
   selectedDate,
   selectedTime,
+  defaultRoomId = "",
 }: BookingModalProps) {
+  const { rooms, createBooking } = useBookingStore()
   const [isLoading, setIsLoading] = useState(false)
+  const [participantInput, setParticipantInput] = useState("")
   const [formData, setFormData] = useState({
-    room: "",
+    roomId: defaultRoomId,
     startTime: selectedTime || "",
     duration: "60",
     purpose: "",
     participants: [] as string[],
   })
-  const [participantInput, setParticipantInput] = useState("")
+
+  useEffect(() => {
+    if (!open) return
+    setFormData((current) => ({
+      ...current,
+      roomId: defaultRoomId || current.roomId,
+      startTime: selectedTime || current.startTime,
+    }))
+  }, [defaultRoomId, open, selectedTime])
+
+  const activeRooms = rooms.filter((room) => room.status === "active")
+  const selectedRoom = rooms.find((room) => room.id === formData.roomId)
+
+  const endTime = useMemo(() => {
+    const startIndex = timeSlots.indexOf(formData.startTime)
+    if (startIndex < 0) return ""
+    const increments = Math.ceil(Number(formData.duration) / 30)
+    return timeSlots[Math.min(timeSlots.length - 1, startIndex + increments)] ?? ""
+  }, [formData.duration, formData.startTime])
 
   const handleAddParticipant = () => {
-    if (participantInput.trim() && !formData.participants.includes(participantInput.trim())) {
-      setFormData({
-        ...formData,
-        participants: [...formData.participants, participantInput.trim()],
-      })
-      setParticipantInput("")
-    }
-  }
+    const email = participantInput.trim().toLowerCase()
+    if (!email || formData.participants.includes(email)) return
 
-  const handleRemoveParticipant = (email: string) => {
     setFormData({
       ...formData,
-      participants: formData.participants.filter((p) => p !== email),
+      participants: [...formData.participants, email],
     })
+    setParticipantInput("")
   }
 
   const handleSubmit = async () => {
+    if (!selectedDate || !endTime) return
+
     setIsLoading(true)
-    // Simulate booking creation
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    await new Promise((resolve) => setTimeout(resolve, 350))
+
+    const result = createBooking({
+      roomId: formData.roomId,
+      date: dateStringFromDate(selectedDate),
+      startTime: formData.startTime,
+      endTime,
+      purpose: formData.purpose,
+      participantEmails: formData.participants,
+    })
+
     setIsLoading(false)
+
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+
+    toast.success("Booking created", {
+      description: `${selectedRoom?.name ?? "Room"} is reserved for ${formData.startTime}.`,
+    })
     onOpenChange(false)
-    // Reset form
     setFormData({
-      room: "",
+      roomId: "",
       startTime: "",
       duration: "60",
       purpose: "",
@@ -114,20 +126,17 @@ export function BookingModal({
     })
   }
 
-  const selectedRoom = rooms.find((r) => r.id === formData.room)
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl">Create Booking</DialogTitle>
           <DialogDescription>
-            Book a study room for your session. Fill in the details below.
+            Reserve an interview space, invite participants, and keep the slot accountable.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {/* Date Display */}
           {selectedDate && (
             <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 border border-border">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -140,25 +149,22 @@ export function BookingModal({
             </div>
           )}
 
-          {/* Room Selection */}
           <div className="space-y-2">
             <Label htmlFor="room">Room</Label>
             <Select
-              value={formData.room}
-              onValueChange={(value) => setFormData({ ...formData, room: value })}
+              value={formData.roomId}
+              onValueChange={(value) => setFormData({ ...formData, roomId: value })}
             >
               <SelectTrigger id="room" className="h-11">
                 <SelectValue placeholder="Select a room" />
               </SelectTrigger>
               <SelectContent>
-                {rooms.map((room) => (
+                {activeRooms.map((room) => (
                   <SelectItem key={room.id} value={room.id}>
-                    <div className="flex items-center justify-between w-full gap-4">
-                      <span>{room.name}</span>
-                      <Badge variant="secondary" className="ml-2">
-                        {room.capacity} seats
-                      </Badge>
-                    </div>
+                    <span className="flex items-center gap-2">
+                      {room.name}
+                      <Badge variant="secondary">{room.capacity} seats</Badge>
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -171,7 +177,6 @@ export function BookingModal({
             )}
           </div>
 
-          {/* Time Selection */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="startTime">Start Time</Label>
@@ -184,7 +189,7 @@ export function BookingModal({
                   <SelectValue placeholder="Select time" />
                 </SelectTrigger>
                 <SelectContent>
-                  {timeOptions.map((time) => (
+                  {timeSlots.slice(0, -1).map((time) => (
                     <SelectItem key={time} value={time}>
                       {time}
                     </SelectItem>
@@ -213,42 +218,39 @@ export function BookingModal({
             </div>
           </div>
 
-          {/* Rules Info */}
-          <div className="flex items-start gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
-            <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-            <div className="text-sm">
-              <p className="font-medium text-primary">Booking Rules</p>
-              <ul className="text-muted-foreground text-xs mt-1 space-y-0.5">
-                <li>• Maximum booking duration: 2 hours</li>
-                <li>• 30-minute interval slots only</li>
-                <li>• Check-in required within 15 minutes</li>
-              </ul>
+          {formData.startTime && endTime && (
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
+              <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium text-primary">Booking Rules</p>
+                <p className="text-muted-foreground text-xs mt-1">
+                  This slot runs from {formData.startTime} to {endTime}. Standard bookings are capped at 2 hours.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Purpose */}
           <div className="space-y-2">
-            <Label htmlFor="purpose">Purpose (Optional)</Label>
+            <Label htmlFor="purpose">Purpose</Label>
             <Textarea
               id="purpose"
-              placeholder="Describe the purpose of your booking..."
+              placeholder="e.g., Frontend intern interview, portfolio review, coding assessment..."
               value={formData.purpose}
-              onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
+              onChange={(event) => setFormData({ ...formData, purpose: event.target.value })}
               rows={3}
             />
           </div>
 
-          {/* Participants */}
           <div className="space-y-2">
-            <Label>Add Participants (Optional)</Label>
+            <Label>Add Participants</Label>
             <div className="flex gap-2">
               <Input
-                placeholder="Enter email address"
+                placeholder="candidate@university.edu"
                 value={participantInput}
-                onChange={(e) => setParticipantInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
+                onChange={(event) => setParticipantInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault()
                     handleAddParticipant()
                   }
                 }}
@@ -262,21 +264,16 @@ export function BookingModal({
             {formData.participants.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
                 {formData.participants.map((email) => (
-                  <Badge
-                    key={email}
-                    variant="secondary"
-                    className="pl-2 pr-1 py-1 gap-1 bg-muted"
-                  >
+                  <Badge key={email} variant="secondary" className="pl-2 pr-1 py-1 gap-1 bg-muted">
                     <span className="text-xs">{email}</span>
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] px-1 py-0 bg-warning/10 text-warning border-warning/30"
-                    >
-                      pending
-                    </Badge>
                     <button
-                      onClick={() => handleRemoveParticipant(email)}
-                      className="ml-1 hover:bg-destructive/20 rounded p-0.5 transition-colors"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          participants: formData.participants.filter((participant) => participant !== email),
+                        })
+                      }
+                      className={cn("ml-1 hover:bg-destructive/20 rounded p-0.5 transition-colors")}
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -291,7 +288,7 @@ export function BookingModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!formData.room || !formData.startTime || isLoading}>
+          <Button onClick={handleSubmit} disabled={!formData.roomId || !formData.startTime || isLoading}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
