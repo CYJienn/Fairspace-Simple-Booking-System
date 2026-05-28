@@ -15,7 +15,6 @@ import {
   LogOut,
   Mail,
   MapPin,
-  MessageSquare,
   Pencil,
   Flag,
   Search,
@@ -73,6 +72,7 @@ type ChatMessage = {
   id: string
   role: "user" | "assistant"
   content: string
+  action?: ChatAction
 }
 
 type ChatAction = {
@@ -85,8 +85,11 @@ type ChatAction = {
     title: string
     organizer: string
     attendees: number
+    requestMessage?: string
   }
 }
+
+type AiSource = "gemini" | "fallback" | "guardrail" | "analytics"
 
 type RoomRow = {
   id: string
@@ -243,7 +246,28 @@ const fallbackBookings: Booking[] = [
 ]
 
 const dates = ["2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
-const times = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30"]
+const times = [
+  "09:00",
+  "09:30",
+  "10:00",
+  "10:30",
+  "11:00",
+  "11:30",
+  "12:00",
+  "12:30",
+  "13:00",
+  "13:30",
+  "14:00",
+  "14:30",
+  "15:00",
+  "15:30",
+  "16:00",
+  "16:30",
+  "17:00",
+  "17:30",
+  "18:00",
+  "18:30",
+]
 const MAX_STANDARD_MINUTES = 120
 
 const statusStyle: Record<BookingStatus, string> = {
@@ -372,6 +396,7 @@ export default function BookingSystemApp() {
     avatarUrl: "",
   })
   const [isChatLoading, setIsChatLoading] = useState(false)
+  const [aiSource, setAiSource] = useState<AiSource | "warming" | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -381,6 +406,7 @@ export default function BookingSystemApp() {
     },
   ])
   const chatBottomRef = useRef<HTMLDivElement | null>(null)
+  const aiWarmStartedRef = useRef(false)
 
   const organizer = profile.fullName || user?.user_metadata?.name || user?.email?.split("@")[0] || "Student"
   const end = addMinutes(start, duration)
@@ -404,32 +430,71 @@ export default function BookingSystemApp() {
 
   const roomName = (roomId: string) => rooms.find((room) => room.id === roomId)?.name ?? "Unknown room"
 
-  const ensureProfile = async (currentUser: User, role: "student" | "admin") => {
+  const ensureProfile = async (currentUser: User, requestedRole: "student" | "admin") => {
     const supabase = createBrowserClient()
     const fullName = currentUser.user_metadata?.name || currentUser.email?.split("@")[0] || "FairSpace User"
     const matricId = currentUser.user_metadata?.matric_id || ""
     const faculty = currentUser.user_metadata?.faculty || ""
     const avatarUrl = currentUser.user_metadata?.avatar_url || ""
+    const metadataRole = currentUser.user_metadata?.role === "admin" || currentUser.user_metadata?.role === "student"
+      ? currentUser.user_metadata.role
+      : undefined
+    const { data: existingProfile, error: existingError } = await supabase
+      .from("fairspace_profiles")
+      .select("id, role, full_name, email, matric_id, faculty, avatar_url")
+      .eq("id", currentUser.id)
+      .maybeSingle()
+
+    if (existingError) throw existingError
+
+    if (existingProfile) {
+      const finalRole = metadataRole ?? (existingProfile.role === "admin" ? "admin" : "student")
+      let profileData = existingProfile
+      if (existingProfile.role !== finalRole) {
+        const { data, error } = await supabase
+          .from("fairspace_profiles")
+          .update({ role: finalRole })
+          .eq("id", currentUser.id)
+          .select("id, role, full_name, email, matric_id, faculty, avatar_url")
+          .single()
+
+        if (error) throw error
+        profileData = data
+      }
+
+      if (!profileData) throw new Error("Unable to load profile.")
+      setProfileId(profileData.id)
+      setPortalRole(finalRole)
+      window.localStorage.setItem("fairspace-role", finalRole)
+      setProfile({
+        fullName: profileData.full_name ?? fullName,
+        email: profileData.email ?? currentUser.email ?? "",
+        matricId: profileData.matric_id ?? matricId,
+        faculty: profileData.faculty ?? faculty,
+        avatarUrl: profileData.avatar_url ?? avatarUrl,
+      })
+      return
+    }
+
+    const finalRole = metadataRole ?? requestedRole
     const { data, error } = await supabase
       .from("fairspace_profiles")
-      .upsert(
-        {
-          id: currentUser.id,
-          full_name: fullName,
-          email: currentUser.email,
-          role,
-          matric_id: matricId,
-          faculty,
-          avatar_url: avatarUrl,
-        },
-        { onConflict: "email" },
-      )
+      .insert({
+        id: currentUser.id,
+        full_name: fullName,
+        email: currentUser.email,
+        role: finalRole,
+        matric_id: matricId,
+        faculty,
+        avatar_url: avatarUrl,
+      })
       .select("id, role, full_name, email, matric_id, faculty, avatar_url")
       .single()
 
     if (error) throw error
     setProfileId(data.id)
-    setPortalRole(data.role === "admin" ? "admin" : role)
+    setPortalRole(data.role === "admin" ? "admin" : "student")
+    window.localStorage.setItem("fairspace-role", data.role === "admin" ? "admin" : "student")
     setProfile({
       fullName: data.full_name ?? fullName,
       email: data.email ?? currentUser.email ?? "",
@@ -501,6 +566,36 @@ export default function BookingSystemApp() {
   }, [])
 
   useEffect(() => {
+    if (portalRole !== "student" || !chatOpen || aiWarmStartedRef.current) return
+    aiWarmStartedRef.current = true
+    setAiSource("warming")
+
+    void fetch("/api/ai-booking-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "hello",
+        context: {
+          rooms,
+          bookings,
+          selectedDate,
+          defaultOrganizer: organizer,
+          role: portalRole,
+        },
+        history: [],
+      }),
+    })
+      .then(async (response) => {
+        const data = (await response.json()) as { source?: AiSource }
+        setAiSource(data.source ?? "gemini")
+      })
+      .catch(() => {
+        aiWarmStartedRef.current = false
+        setAiSource("fallback")
+      })
+  }, [bookings, chatOpen, organizer, portalRole, rooms, selectedDate])
+
+  useEffect(() => {
     if (!hasBrowserSupabaseConfig()) {
       toast.error("Supabase public keys are missing. Add them in .env.local, then restart the dev server.")
       router.replace("/login")
@@ -509,7 +604,6 @@ export default function BookingSystemApp() {
 
     const supabase = createBrowserClient()
     const storedRole = window.localStorage.getItem("fairspace-role")
-    if (storedRole === "admin") setPortalRole("admin")
 
     const init = async () => {
       const { data } = await supabase.auth.getSession()
@@ -635,8 +729,8 @@ export default function BookingSystemApp() {
     }
 
     const requestedMinutes = minutes(requestEnd) - minutes(requestStart)
-    if (requestedMinutes <= MAX_STANDARD_MINUTES || requestedMinutes > 180) {
-      toast.error("Choose a time range longer than 2 hours and not more than 3 hours.")
+    if (requestedMinutes <= MAX_STANDARD_MINUTES) {
+      toast.error("Choose a time range longer than 2 hours.")
       return
     }
 
@@ -919,7 +1013,32 @@ export default function BookingSystemApp() {
   const signOut = async () => {
     const supabase = createBrowserClient()
     await supabase.auth.signOut()
+    window.localStorage.removeItem("fairspace-role")
     router.replace("/login")
+  }
+
+  const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+  const typeAssistantReply = async (reply: string, action?: ChatAction) => {
+    const assistantId = crypto.randomUUID()
+    setMessages((current) => [...current, { id: assistantId, role: "assistant", content: "" }])
+    await sleep(1000)
+
+    for (let index = 1; index <= reply.length; index += 2) {
+      const partial = reply.slice(0, index)
+      setMessages((current) =>
+        current.map((item) => (item.id === assistantId ? { ...item, content: partial } : item)),
+      )
+      if (index % 16 === 1) {
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 0)
+      }
+      await sleep(14)
+    }
+
+    setMessages((current) =>
+      current.map((item) => (item.id === assistantId ? { ...item, content: reply, action } : item)),
+    )
+    setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
   }
 
   const sendChat = async () => {
@@ -942,35 +1061,28 @@ export default function BookingSystemApp() {
             bookings,
             selectedDate,
             defaultOrganizer: organizer,
+            role: portalRole,
           },
+          history: messages.slice(-8).map((item) => ({ role: item.role, content: item.content })),
         }),
       })
 
-      const data = (await response.json()) as { reply: string; action?: ChatAction }
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: data.reply }])
+      const data = (await response.json()) as { reply: string; action?: ChatAction; source?: AiSource }
+      setAiSource(data.source ?? null)
+      await typeAssistantReply(data.reply, data.action)
 
       if (data.action?.type === "CREATE_BOOKING") {
-        const ok = await createBooking(data.action.payload)
-        setMessages((current) => [
-          ...current,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: ok
-              ? "Done. I created the booking in the schedule."
-              : "I prepared the booking, but the app blocked it because of the 2-hour rule, capacity, maintenance, or a conflict.",
-          },
-        ])
+        if (portalRole === "admin") {
+          await typeAssistantReply(
+            "You're in admin mode, so I can't create bookings here. I can help review, approve, or manage bookings, or you can switch to a student account to book a slot.",
+          )
+          return
+        }
+
+        return
       }
     } catch {
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: "I could not reach the booking assistant endpoint. Please try again.",
-        },
-      ])
+      await typeAssistantReply("I could not reach the booking assistant endpoint. Please try again.")
     } finally {
       setIsChatLoading(false)
       setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
@@ -1072,9 +1184,11 @@ export default function BookingSystemApp() {
               <CalendarView
                 rooms={rooms}
                 bookings={bookings}
+                portalRole={portalRole}
                 selectedDate={selectedDate}
                 setSelectedDate={setSelectedDate}
                 onPickSlot={(roomId, date, slot) => {
+                  if (portalRole === "admin") return
                   setSelectedRoom(roomId)
                   setSelectedDate(date)
                   setStart(slot)
@@ -1155,7 +1269,7 @@ export default function BookingSystemApp() {
                         </Badge>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {room.amenities.map((amenity) => <Badge key={amenity} variant="outline" className="rounded-md border-[#d5ddd6]">{amenity}</Badge>)}
+                        {room.amenities.map((amenity, index) => <Badge key={`${room.id}-${amenity}-${index}`} variant="outline" className="rounded-md border-[#d5ddd6]">{amenity}</Badge>)}
                       </div>
                       <p className="text-sm text-[#66736c]">Capacity: {room.capacity} people</p>
                       {portalRole === "admin" && (
@@ -1344,7 +1458,7 @@ export default function BookingSystemApp() {
           <DialogHeader>
             <DialogTitle>Request longer booking</DialogTitle>
             <DialogDescription>
-              Send the admin a reason for booking {roomName(selectedRoom)} for more than 2 hours, up to 3 hours max.
+              Send the admin a reason for booking {roomName(selectedRoom)} for more than 2 hours.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1726,16 +1840,39 @@ export default function BookingSystemApp() {
         </DialogContent>
       </Dialog>
 
-      <FloatingChat
-        open={chatOpen}
-        setOpen={setChatOpen}
-        messages={messages}
-        chatInput={chatInput}
-        setChatInput={setChatInput}
-        isChatLoading={isChatLoading}
-        sendChat={sendChat}
-        chatBottomRef={chatBottomRef}
-      />
+      {portalRole === "student" && (
+        <FloatingChat
+          open={chatOpen}
+          setOpen={setChatOpen}
+          messages={messages}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+          isChatLoading={isChatLoading}
+          sendChat={sendChat}
+          chatBottomRef={chatBottomRef}
+          aiSource={aiSource}
+          onConfirmAction={async (action) => {
+            const isLongBooking = minutes(action.payload.end) - minutes(action.payload.start) > MAX_STANDARD_MINUTES
+            const ok = await createBooking(
+              {
+                ...action.payload,
+                requestMessage:
+                  action.payload.requestMessage ??
+                  (isLongBooking ? "Requested through the AI booking assistant." : undefined),
+              },
+              isLongBooking ? "pending" : "confirmed",
+              isLongBooking,
+            )
+            await typeAssistantReply(
+              ok
+                ? isLongBooking
+                  ? "Done. I sent this as a pending approval request to admin."
+                  : "Done. I booked that slot for you."
+                : "I could not complete it because of capacity, maintenance, conflict, or your daily booking limit.",
+            )
+          }}
+        />
+      )}
     </main>
   )
 }
@@ -1749,6 +1886,8 @@ function FloatingChat({
   isChatLoading,
   sendChat,
   chatBottomRef,
+  aiSource,
+  onConfirmAction,
 }: {
   open: boolean
   setOpen: (open: boolean) => void
@@ -1758,7 +1897,11 @@ function FloatingChat({
   isChatLoading: boolean
   sendChat: () => void
   chatBottomRef: React.RefObject<HTMLDivElement | null>
+  aiSource: AiSource | "warming" | null
+  onConfirmAction: (action: ChatAction) => void | Promise<void>
 }) {
+  const statusText = aiSource === "warming" ? "AI Assistant connecting..." : "AI Assistant active"
+
   return (
     <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
       {open && (
@@ -1783,15 +1926,35 @@ function FloatingChat({
             <div className="h-[320px] space-y-3 overflow-y-auto rounded-md border border-white/10 bg-white/5 p-3">
               {messages.map((message) => (
                 <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-                  <div className={cn("max-w-[88%] rounded-md px-3 py-2 text-sm leading-6", message.role === "user" ? "bg-[#8de0c2] text-[#10221d]" : "bg-white/10 text-white/85")}>
-                    {message.content}
+                  <div className={cn("max-w-[88%] space-y-3 rounded-md px-3 py-2 text-sm leading-6", message.role === "user" ? "bg-[#8de0c2] text-[#10221d]" : "bg-white/10 text-white/85")}>
+                    <p>{message.content}</p>
+                    {message.action?.type === "CREATE_BOOKING" && (
+                      <div className="rounded-md border border-white/10 bg-white/10 p-3">
+                        <p className="font-semibold text-white">Suggested slot</p>
+                        <p className="text-xs text-white/75">
+                          {message.action.payload.date}, {message.action.payload.start}-{message.action.payload.end}
+                        </p>
+                        <p className="text-xs text-white/75">
+                          {message.action.payload.attendees} attendee(s)
+                        </p>
+                        <Button
+                          size="sm"
+                          className="mt-3 w-full rounded-md bg-[#8de0c2] text-[#10221d] hover:bg-[#b8ecd9]"
+                          onClick={() => onConfirmAction(message.action!)}
+                        >
+                          {minutes(message.action.payload.end) - minutes(message.action.payload.start) > MAX_STANDARD_MINUTES
+                            ? "Send pending request"
+                            : "Book this slot"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
               {isChatLoading && (
                 <div className="flex items-center gap-2 text-sm text-white/65">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Thinking about available slots...
+                  Writing response...
                 </div>
               )}
               <div ref={chatBottomRef} />
@@ -1813,13 +1976,7 @@ function FloatingChat({
                 <Send className="mr-2 h-4 w-4" />
                 Send
               </Button>
-            </div>
-            <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs leading-5 text-white/60">
-              <p className="mb-1 flex items-center gap-2 font-semibold text-[#8de0c2]">
-                <MessageSquare className="h-3.5 w-3.5" />
-                API contract
-              </p>
-              <p>POST /api/ai-booking-chat</p>
+              <p className="text-xs text-white/45">{statusText}</p>
             </div>
           </CardContent>
         </Card>
@@ -1970,6 +2127,7 @@ function MiniMonthCalendar({
 function CalendarView({
   rooms,
   bookings,
+  portalRole,
   selectedDate,
   setSelectedDate,
   onPickSlot,
@@ -1978,6 +2136,7 @@ function CalendarView({
 }: {
   rooms: Room[]
   bookings: Booking[]
+  portalRole: "student" | "admin"
   selectedDate: string
   setSelectedDate: (date: string) => void
   onPickSlot: (roomId: string, date: string, slot: string) => void
@@ -1998,7 +2157,11 @@ function CalendarView({
           <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-end">
             <div>
           <h2 className="text-lg font-semibold">Calendar view</h2>
-              <p className="text-sm text-[#66736c]">Click an empty slot to book, or click an occupied slot to see who booked it.</p>
+              <p className="text-sm text-[#66736c]">
+                {portalRole === "admin"
+                  ? "Click an occupied slot to review or remove a booking. Empty slots are read-only for admins."
+                  : "Click an empty slot to book, or click an occupied slot to see who booked it."}
+              </p>
               <p className="mt-2 text-base font-semibold">{formatLongDate(selectedDate)}</p>
             </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -2044,25 +2207,34 @@ function CalendarView({
                   {activeRooms.map((room) => {
                     const booking = bookings.find((item) => item.date === selectedDate && item.roomId === room.id && item.status !== "cancelled" && minutes(slot) >= minutes(item.start) && minutes(slot) < minutes(item.end))
                     const isBookingStart = booking?.start === slot
+                    const isPending = booking?.status === "pending"
                     return (
                       <button
                         key={`${room.id}-${slot}`}
+                        type="button"
+                        disabled={!booking && portalRole === "admin"}
                         className={cn(
                           "min-h-16 border-l border-[#edf1ee] p-2 text-left transition",
-                          booking ? "bg-[#e7f4ef] hover:bg-[#dcefe7]" : "hover:bg-[#f2f6f3]",
+                          booking && !isPending && "bg-[#e7f4ef] hover:bg-[#dcefe7]",
+                          isPending && "bg-[#fff4cf] hover:bg-[#ffedb0]",
+                          !booking && portalRole !== "admin" && "hover:bg-[#f2f6f3]",
+                          !booking && portalRole === "admin" && "cursor-default",
                         )}
                         onClick={() => booking ? onOpenBooking(booking) : onPickSlot(room.id, selectedDate, slot)}
                       >
                         {booking && isBookingStart ? (
-                          <div className="rounded-md border border-[#b9d8cb] bg-white p-2">
+                          <div className={cn("rounded-md border bg-white p-2", isPending ? "border-[#f0d893]" : "border-[#b9d8cb]")}>
                             <div className="mb-1 flex items-center gap-2">
                               <ProfileAvatar name={booking.organizer} src={booking.organizerAvatar} size="sm" />
                               <p className="truncate text-sm font-semibold">{booking.title}</p>
                             </div>
                             <p className="text-xs text-[#66736c]">{roomName(booking.roomId)} - {booking.start}-{booking.end}</p>
+                            {isPending && <p className="mt-1 text-xs font-medium text-[#765a00]">Pending admin approval</p>}
                           </div>
                         ) : booking ? (
-                          <span className="text-xs text-[#8a968f]">Occupied until {booking.end}</span>
+                          <span className={cn("text-xs", isPending ? "text-[#765a00]" : "text-[#8a968f]")}>
+                            {isPending ? `Pending until ${booking.end}` : `Occupied until ${booking.end}`}
+                          </span>
                         ) : (
                           <span className="text-xs text-[#8a968f]">Available</span>
                         )}
