@@ -17,7 +17,6 @@ import {
   Clock,
   Calendar,
   DoorOpen,
-  CheckCircle2,
   XCircle,
   Activity,
 } from "lucide-react"
@@ -34,7 +33,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
 } from "recharts"
 
 const stats = [

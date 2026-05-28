@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createBrowserClient } from "@/lib/supabase/browser-client"
+import { createBrowserClient, hasBrowserSupabaseConfig } from "@/lib/supabase/browser-client"
 import {
   Select,
   SelectContent,
@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Building2, Eye, EyeOff, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react"
+import { Building2, Eye, EyeOff, ArrowLeft, Loader2, CheckCircle2, GraduationCap, ShieldCheck, Upload } from "lucide-react"
 
 const faculties = [
   "Faculty of Computing",
@@ -33,23 +33,53 @@ const passwordRequirements = [
   { label: "Contains number", test: (p: string) => /[0-9]/.test(p) },
 ]
 
+const DEMO_ADMIN_KEY = "FAIRSPACE-ADMIN"
+
 export default function SignupPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [statusMessage, setStatusMessage] = useState("")
+  const [role, setRole] = useState<"student" | "admin">("student")
+  const isSupabaseReady = hasBrowserSupabaseConfig()
   const [formData, setFormData] = useState({
     name: "",
     matricId: "",
     faculty: "",
     email: "",
     password: "",
+    avatarUrl: "",
+    adminKey: "",
   })
+
+  const readPhoto = (file?: File) => {
+    if (!file) return
+    if (file.size > 700_000) {
+      setStatusMessage("Use a profile image smaller than 700 KB for this demo.")
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => setFormData((current) => ({ ...current, avatarUrl: String(reader.result) }))
+    reader.readAsDataURL(file)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setStatusMessage("")
+
+    if (!isSupabaseReady) {
+      setStatusMessage("Supabase public keys are missing. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local, then restart pnpm dev.")
+      setIsLoading(false)
+      return
+    }
+
+    if (role === "admin" && formData.adminKey.trim() !== DEMO_ADMIN_KEY) {
+      setStatusMessage("Invalid admin key. Use FAIRSPACE-ADMIN for this demo project.")
+      setIsLoading(false)
+      return
+    }
 
     const supabase = createBrowserClient()
     const redirectTo = `${window.location.origin}/auth/callback`
@@ -63,6 +93,9 @@ export default function SignupPage() {
           name: formData.name,
           matric_id: formData.matricId,
           faculty: formData.faculty,
+          role,
+          avatar_url: formData.avatarUrl,
+          admin_key: role === "admin" ? formData.adminKey : "",
         },
       },
     })
@@ -79,12 +112,18 @@ export default function SignupPage() {
       return
     }
 
-    router.push("/dashboard")
+    router.push("/")
   }
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
     setStatusMessage("")
+    if (!isSupabaseReady) {
+      setStatusMessage("Supabase public keys are missing. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local, then restart pnpm dev.")
+      setIsLoading(false)
+      return
+    }
+
     const supabase = createBrowserClient()
     const redirectTo = `${window.location.origin}/auth/callback`
 
@@ -131,7 +170,46 @@ export default function SignupPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
+                <Button
+                  type="button"
+                  variant={role === "student" ? "default" : "ghost"}
+                  className="h-11"
+                  onClick={() => setRole("student")}
+                >
+                  <GraduationCap className="mr-2 h-4 w-4" />
+                  Student
+                </Button>
+                <Button
+                  type="button"
+                  variant={role === "admin" ? "default" : "ghost"}
+                  className="h-11"
+                  onClick={() => setRole("admin")}
+                >
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  Admin
+                </Button>
+              </div>
+
               <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="flex items-center gap-4 rounded-md border border-border p-3">
+                  {formData.avatarUrl ? (
+                    <img src={formData.avatarUrl} alt="Profile preview" className="h-16 w-16 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+                      Photo
+                    </div>
+                  )}
+                  <div>
+                    <Label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">
+                      <Upload className="h-4 w-4" />
+                      Upload picture
+                      <input type="file" accept="image/*" className="sr-only" onChange={(event) => readPhoto(event.target.files?.[0])} />
+                    </Label>
+                    <p className="mt-2 text-xs text-muted-foreground">Shown on your room bookings.</p>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
                   <Input
@@ -145,40 +223,55 @@ export default function SignupPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                {role === "student" ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="matricId">Matric ID</Label>
+                      <Input
+                        id="matricId"
+                        type="text"
+                        placeholder="e.g., A12345678"
+                        value={formData.matricId}
+                        onChange={(e) => setFormData({ ...formData, matricId: e.target.value })}
+                        required
+                        className="h-11"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="faculty">Faculty</Label>
+                      <Select
+                        value={formData.faculty}
+                        onValueChange={(value) => setFormData({ ...formData, faculty: value })}
+                        required
+                      >
+                        <SelectTrigger id="faculty" className="h-11">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {faculties.map((faculty) => (
+                            <SelectItem key={faculty} value={faculty}>
+                              {faculty.replace("Faculty of ", "")}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                ) : (
                   <div className="space-y-2">
-                    <Label htmlFor="matricId">Matric ID</Label>
+                    <Label htmlFor="adminKey">Admin matric number key</Label>
                     <Input
-                      id="matricId"
+                      id="adminKey"
                       type="text"
-                      placeholder="e.g., A12345678"
-                      value={formData.matricId}
-                      onChange={(e) => setFormData({ ...formData, matricId: e.target.value })}
+                      placeholder="FAIRSPACE-ADMIN"
+                      value={formData.adminKey}
+                      onChange={(e) => setFormData({ ...formData, adminKey: e.target.value })}
                       required
                       className="h-11"
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="faculty">Faculty</Label>
-                    <Select
-                      value={formData.faculty}
-                      onValueChange={(value) => setFormData({ ...formData, faculty: value })}
-                      required
-                    >
-                      <SelectTrigger id="faculty" className="h-11">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {faculties.map((faculty) => (
-                          <SelectItem key={faculty} value={faculty}>
-                            {faculty.replace("Faculty of ", "")}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="email">University Email</Label>
@@ -239,7 +332,7 @@ export default function SignupPage() {
                   )}
                 </div>
 
-                <Button type="submit" className="w-full h-11" disabled={isLoading}>
+                <Button type="submit" className="w-full h-11" disabled={isLoading || !isSupabaseReady}>
                   {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -249,7 +342,6 @@ export default function SignupPage() {
                     "Create Account"
                   )}
                 </Button>
-
                 <p className="text-xs text-center text-muted-foreground">
                   By creating an account, you agree to our{" "}
                   <Link href="#" className="text-primary hover:underline">Terms of Service</Link>
@@ -262,6 +354,12 @@ export default function SignupPage() {
                 <p className="text-sm text-center text-destructive">{statusMessage}</p>
               )}
 
+              {!isSupabaseReady && !statusMessage && (
+                <p className="text-sm text-center text-destructive">
+                  Supabase public keys are missing in .env.local.
+                </p>
+              )}
+
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-border" />
@@ -272,7 +370,7 @@ export default function SignupPage() {
               </div>
 
               <div className="grid grid-cols-1 gap-3">
-                <Button variant="outline" className="h-11" type="button" onClick={handleGoogleSignIn}>
+                <Button variant="outline" className="h-11" type="button" onClick={handleGoogleSignIn} disabled={isLoading || !isSupabaseReady}>
                   <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
                     <path
                       fill="currentColor"

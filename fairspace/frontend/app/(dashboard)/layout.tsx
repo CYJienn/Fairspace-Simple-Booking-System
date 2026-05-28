@@ -23,7 +23,6 @@ import {
   FileBarChart,
   BarChart3,
   Shield,
-  Bell,
   Settings,
   LogOut,
   Menu,

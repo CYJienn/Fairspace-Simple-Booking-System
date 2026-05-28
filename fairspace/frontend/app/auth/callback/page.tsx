@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { createBrowserClient } from "@/lib/supabase/browser-client"
+import { createBrowserClient, hasBrowserSupabaseConfig } from "@/lib/supabase/browser-client"
 import { Button } from "@/components/ui/button"
 
 export default function AuthCallbackPage() {
@@ -12,6 +12,11 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     const run = async () => {
+      if (!hasBrowserSupabaseConfig()) {
+        setStatus("Supabase public keys are missing. Add them in .env.local, then restart the dev server.")
+        return
+      }
+
       const supabase = createBrowserClient()
       const params = new URLSearchParams(window.location.search)
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""))
@@ -51,7 +56,7 @@ export default function AuthCallbackPage() {
             return
           }
 
-          router.replace("/dashboard")
+          router.replace("/")
           return
         }
 
@@ -71,7 +76,7 @@ export default function AuthCallbackPage() {
         return
       }
 
-      router.replace("/dashboard")
+      router.replace("/")
     }
 
     run().catch((error) => {
