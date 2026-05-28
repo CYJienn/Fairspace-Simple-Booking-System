@@ -53,7 +53,7 @@ type GeminiResponse = {
   }>
 }
 
-const GEMINI_MODEL = "gemini-3.5-flash"
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash"
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const DAY_START = 9 * 60
 const DAY_END = 18 * 60 + 30
