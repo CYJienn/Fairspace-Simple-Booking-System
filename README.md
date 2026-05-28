@@ -34,8 +34,6 @@ The app is built as a realistic full-stack web project rather than a static prot
 ```txt
 Simple-Booking-System/
 +-- README.md
-+-- docs/
-|   +-- FairSpace_Shortcut_Asia_Brief_Documentation.docx
 +-- fairspace/
     +-- backend/
     |   +-- scripts/
@@ -199,11 +197,3 @@ The app can be deployed on Vercel from the `fairspace/frontend` folder. Make sur
 - `GEMINI_MODEL`
 
 If Vercel shows a warning about `outputFileTracingRoot` and `turbopack.root`, it is safe to leave as long as the build completes. It is a configuration warning, not a runtime failure.
-
-## Future Improvements
-
-- Add Supabase Row Level Security policies for production-grade authorization.
-- Store reports, mailbox messages, and bans in dedicated persisted tables.
-- Add email reminders for booking confirmation and missed check-ins.
-- Add automated tests for booking conflict logic and AI intent parsing.
-- Add real-time updates when another user books a slot.
