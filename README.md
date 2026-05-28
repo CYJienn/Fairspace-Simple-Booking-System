@@ -1,139 +1,101 @@
-# FairSpace AI
+# FairSpace
 
-FairSpace AI is a university discussion-room booking system built for the Shortcut Asia Internship Challenge 2026 under the **Simple Booking System** topic. It helps students find and reserve shared campus rooms, while giving admins tools to manage room availability, pending long-booking requests, reports, and user access.
+FairSpace is a university discussion room booking system for students and administrators. Students can find available rooms, book time slots, manage their own schedule, report issues, and use an AI assistant to get booking suggestions. Administrators get a separate control panel for room maintenance, pending approvals, reports, booking removals, and user restrictions.
 
-The project is designed as a portfolio-ready product rather than a throwaway prototype: it includes authentication, role-based views, a calendar booking flow, booking conflict checks, profile photos, reports, admin actions, and a student AI assistant that can recommend and prepare room bookings.
+The app is built as a realistic full-stack web project rather than a static prototype. It uses Supabase for authentication and data persistence, Next.js for the web app and API routes, and Gemini for the student AI booking assistant.
 
-## Live Demo
+## Features
 
-Add your deployed Vercel URL here before submission:
-
-```txt
-https://your-vercel-app-url.vercel.app
-```
+- Student and admin authentication with role-based portals.
+- Calendar timetable for booking discussion rooms.
+- Searchable rooms with capacity, amenities, and maintenance status.
+- Standard booking limit of 2 hours per student per day.
+- Longer booking requests that enter an admin approval queue.
+- Student schedule view with edit and cancel actions for own bookings.
+- Admin schedule and calendar view with booking removal reasons.
+- Report flow for room misuse, booking issues, and hogging cases.
+- Mailbox for admin follow-up messages and system notices.
+- Room management for admins, including capacity, tags, and availability.
+- Ban-user flow for admin moderation.
+- Student-only AI assistant that can recommend slots and prepare booking actions.
+- Responsive layout with mobile-specific header and action behavior.
 
 ## Tech Stack
 
-- **Frontend:** Next.js 16, React 19, TypeScript
-- **UI:** Tailwind CSS, Radix UI components, Lucide icons
-- **Database/Auth:** Supabase Auth + Supabase Postgres
-- **AI:** Gemini 2.5 Flash through a server-side Next.js API route
+- **Framework:** Next.js 16 App Router
+- **Language:** TypeScript
+- **UI:** React 19, Tailwind CSS, Radix UI, Lucide icons
+- **Auth and database:** Supabase Auth and Supabase Postgres
+- **AI:** Gemini 2.5 Flash through a Next.js API route
 - **Deployment:** Vercel
 
-## Core Features
+## Project Structure
 
-1. **Student room booking calendar**
-   - Students book rooms through a calendar timetable.
-   - Empty slots open a booking form.
-   - Occupied slots show booking details, attendee count, and booking owner profile information.
-   - Standard bookings are limited to 2 hours.
+```txt
+Simple-Booking-System/
++-- README.md
++-- docs/
+|   +-- FairSpace_Shortcut_Asia_Brief_Documentation.docx
++-- fairspace/
+    +-- backend/
+    |   +-- scripts/
+    |   |   +-- run-sql.mjs
+    |   +-- sql/
+    |   |   +-- ensure_profiles_role.sql
+    |   |   +-- seed.sql
+    |   +-- .env.example
+    |   +-- package.json
+    +-- frontend/
+        +-- app/
+        |   +-- api/ai-booking-chat/route.ts
+        |   +-- login/
+        |   +-- signup/
+        |   +-- layout.tsx
+        |   +-- page.tsx
+        +-- components/
+        +-- hooks/
+        +-- lib/
+        +-- public/
+        +-- .env.example
+        +-- package.json
+```
 
-2. **Booking management**
-   - Students can view and manage their own schedule.
-   - Students can edit/cancel their own bookings.
-   - Admins can remove bookings, but must give a reason so the student can be notified.
-   - Pending longer bookings appear in the admin queue.
-
-3. **Admin control panel**
-   - Admins have a different interface from students.
-   - Admins can edit rooms, capacities, amenities, and maintenance status.
-   - Admins can review reports, resolve tickets, approve/reject long booking requests, and ban users.
-
-4. **Reports and mailbox**
-   - Students can report room misuse, booking issues, hogging, and other problems.
-   - Reports can include a photo attachment in the UI flow.
-   - Admin replies and booking-removal messages appear in the mailbox.
-
-5. **Student AI booking assistant**
-   - The AI assistant is only available to students.
-   - It can recommend the best slot for a requested date, group size, and requirement such as a screen/projector.
-   - It remembers recent booking context in the chat, so follow-ups like "2 hours, can?" and "yes please" can continue the same booking flow.
-   - It prepares a booking button, but the student must click to confirm.
-   - It refuses to disclose other students' private booking details.
-
-## Why I Built This
-
-I chose the Simple Booking System topic because shared study rooms are a common student problem: people need to know what is free, avoid clashing bookings, request longer slots when necessary, and report misuse when rooms are occupied by the wrong group.
-
-I wanted the project to feel realistic for a university environment, not just a CRUD demo. That is why the app includes student/admin roles, profile photos, maintenance states, admin approval, reports, and a chatbot-style AI assistant.
-
-## Main Technical Decisions
-
-- **Next.js App Router:** I used Next.js so the project can be deployed easily on Vercel and keep frontend pages plus API routes in one codebase.
-- **Supabase:** Supabase gives authentication and Postgres quickly, which fits the challenge timeline while still being close to real production architecture.
-- **Role-based UX:** Students and admins have different capabilities. For example, admins cannot book slots from the student flow, and students cannot access admin queue/report/ban features.
-- **Calendar-first booking:** I removed the separate manual booking tab and made the calendar the main booking surface because it is easier for students to understand availability visually.
-- **Hybrid AI logic:** The AI route uses Gemini when available, but deterministic planner logic handles booking recommendations and booking-button payloads. This avoids unsafe hallucinated bookings and keeps the core booking flow accurate even if the free Gemini quota is limited.
-
-## Architecture Overview
+## Architecture
 
 ```mermaid
 flowchart TD
-  Student["Student user"] --> Auth["Supabase Auth"]
-  Admin["Admin user"] --> Auth
-  Auth --> App["Next.js FairSpace UI"]
-  App --> Calendar["Calendar + Schedule + Rooms"]
-  App --> API["/api/ai-booking-chat"]
-  API --> Planner["Booking planner logic"]
-  API --> Gemini["Gemini API optional"]
-  App --> DB["Supabase Postgres"]
-  DB --> Rooms["fairspace_rooms"]
-  DB --> Bookings["fairspace_bookings"]
-  DB --> Profiles["fairspace_profiles"]
+  Student["Student"] --> WebApp["Next.js frontend"]
+  Admin["Admin"] --> WebApp
+  WebApp --> SupabaseAuth["Supabase Auth"]
+  WebApp --> SupabaseDB["Supabase Postgres"]
+  WebApp --> AIRoute["/api/ai-booking-chat"]
+  AIRoute --> Planner["Deterministic booking planner"]
+  AIRoute --> Gemini["Gemini API"]
+  SupabaseDB --> Profiles["fairspace_profiles"]
+  SupabaseDB --> Rooms["fairspace_rooms"]
+  SupabaseDB --> Bookings["fairspace_bookings"]
 ```
 
-## Key Flow: Student Booking
+The frontend handles the booking interface, role-based rendering, profile updates, and admin workflows. Supabase stores profiles, rooms, bookings, and related booking state. The AI assistant calls a server-side API route so the Gemini API key is not exposed to the browser.
 
-```mermaid
-flowchart TD
-  A["Student opens calendar"] --> B["Select date"]
-  B --> C["Click empty room/time slot"]
-  C --> D["Fill title, attendees, duration"]
-  D --> E{"Duration <= 2 hours?"}
-  E -->|Yes| F["Create confirmed booking"]
-  E -->|No| G["Send pending admin request"]
-  F --> H["Booking appears in calendar and schedule"]
-  G --> I["Admin reviews in Admin Queue"]
-```
+The AI route uses a hybrid approach:
 
-## Key Flow: AI Booking Assistant
+- Gemini is used for natural chatbot-style responses when available.
+- Deterministic planner logic is used for booking-critical actions such as slot recommendations, conflict checks, and booking button payloads.
 
-```mermaid
-flowchart TD
-  A["Student asks for suggestion"] --> B["Parse date, group size, room needs"]
-  B --> C["Check rooms, capacity, maintenance, conflicts"]
-  C --> D["Recommend best slot"]
-  D --> E["Student asks to book"]
-  E --> F["Return booking confirmation card"]
-  F --> G["Student clicks Book this slot"]
-  G --> H["Booking is created"]
-```
+This keeps the assistant more reliable for booking decisions while still allowing natural conversation.
 
-## Challenges Faced
+## Main Data Model
 
-- **Role confusion:** Early versions allowed a stored local role to make a student account appear as admin. I fixed this by checking Supabase metadata/profile role and rejecting mismatched portal logins.
-- **AI felt too static:** The first chatbot fallback replied too quickly and repeated fixed messages. I added a typing delay, response typing effect, and better follow-up handling.
-- **AI context drift:** The assistant accidentally read its own previous replies as booking context, which caused wrong attendee counts. I fixed this by using only recent user messages for memory.
-- **Date parsing:** Natural dates such as "5th of June" and "June 5" needed careful parsing so the assistant would not fall back to the selected calendar date.
-- **Mobile responsiveness:** Header actions needed mobile-specific sizing so the sign-out button would not overflow on phones.
+The project seed SQL creates the core FairSpace tables:
 
-## Current Limitations
+- `fairspace_profiles`: user profile, role, matric ID, faculty, avatar URL.
+- `fairspace_rooms`: discussion room name, location, capacity, status, and amenities.
+- `fairspace_bookings`: room, date, start/end time, organizer, attendee count, status, and request message.
 
-- The AI assistant depends on `GEMINI_API_KEY`; if Gemini quota is exceeded, the local planner still handles booking suggestions and actions.
-- Some admin features such as report replies and bans are currently implemented in the UI/demo flow and can be extended further with dedicated database tables.
-- Email notifications are represented through an in-app mailbox flow; production email delivery would be a future improvement.
+The current app is structured so it can keep growing with dedicated tables for reports, mailbox messages, bans, and notification delivery.
 
-## Setup Instructions
-
-### 1. Clone and install
-
-```bash
-git clone <your-github-repo-url>
-cd Simple-Booking-System/fairspace/frontend
-pnpm install
-```
-
-### 2. Configure environment variables
+## Environment Variables
 
 Create `fairspace/frontend/.env.local`:
 
@@ -144,34 +106,53 @@ GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-2.5-flash
 ```
 
-For database seeding, create `fairspace/backend/.env.local`:
+Create `fairspace/backend/.env.local` if you want to run the SQL seed script:
 
 ```env
 SUPABASE_DB_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project.supabase.co:5432/postgres
 ```
 
-### 3. Seed Supabase tables
+For Vercel deployment, add the frontend variables in the Vercel project environment settings.
+
+## Local Setup
+
+Install dependencies and run the frontend:
 
 ```bash
-cd ../backend
+cd fairspace/frontend
 pnpm install
-pnpm db:run
-```
-
-### 4. Run the app locally
-
-```bash
-cd ../frontend
 pnpm dev
 ```
 
-Open:
+Open the app:
 
 ```txt
 http://localhost:3000
 ```
 
-### 5. Build checks
+Seed the database:
+
+```bash
+cd fairspace/backend
+pnpm install
+pnpm db:run
+```
+
+By default, `pnpm db:run` runs:
+
+```txt
+sql/seed.sql
+```
+
+To run another SQL file:
+
+```bash
+pnpm db:run -- --file=sql/ensure_profiles_role.sql
+```
+
+## Build and Quality Checks
+
+From `fairspace/frontend`:
 
 ```bash
 pnpm exec tsc --noEmit
@@ -179,52 +160,50 @@ pnpm lint
 pnpm build
 ```
 
-## Demo Video Guide
+The production build creates the Next.js app and API route bundle used by Vercel.
 
-Recommended length: 3-5 minutes.
+## Common Commands
 
-1. **Opening, 20 seconds**
-   - Say: "This is FairSpace AI, a university discussion-room booking system for the Shortcut Asia Simple Booking System challenge."
-   - Mention the target users: students and admins.
+```bash
+# Frontend dev server
+cd fairspace/frontend
+pnpm dev
 
-2. **Student signup/login, 30 seconds**
-   - Show the student/admin portal choice.
-   - Explain that students and admins have separate permissions.
+# Frontend production build
+cd fairspace/frontend
+pnpm build
 
-3. **Calendar booking, 60 seconds**
-   - Go to the Calendar tab.
-   - Select a date.
-   - Click an empty slot.
-   - Create a normal booking under 2 hours.
-   - Show the booking appearing in the calendar/schedule.
+# Run Supabase seed SQL
+cd fairspace/backend
+pnpm db:run
+```
 
-4. **AI assistant, 60-90 seconds**
-   - Ask: "Can you suggest me some booking slots on June 6 with 5 people and a big screen?"
-   - Show the AI recommending rooms with screens/projectors.
-   - Ask: "Book a slot for me."
-   - Show the booking confirmation card.
-   - Click the booking button.
+## AI Assistant Notes
 
-5. **Reports and profile, 30-45 seconds**
-   - Click an occupied booking and show booking details.
-   - Show report flow.
-   - Show profile photo/name update.
+The student AI assistant is intentionally scoped to room booking tasks. It can:
 
-6. **Admin flow, 60 seconds**
-   - Login as admin.
-   - Show that admins have different tabs.
-   - Edit a room capacity/amenity/status.
-   - Review pending long booking requests or reports.
-   - Remove a booking with a reason.
+- Suggest the best time for a requested date.
+- Filter by group size and room needs such as display screen or projector.
+- Prepare a booking confirmation card.
+- Continue follow-up booking context in the same chat.
 
-7. **Closing, 20 seconds**
-   - Explain one challenge you solved: AI context memory, role-based access, or booking conflict handling.
-   - Mention what you would improve with more time: email notifications, richer analytics, and real-time updates.
+It should not disclose other students' private details. Admin AI features were intentionally removed for now so the product focuses on a clean student assistant.
 
-## Submission Checklist
+## Deployment Notes
 
-- [ ] Deployed app URL
-- [ ] Public GitHub repository or shared private repo access
-- [ ] README completed with setup and approach
-- [ ] Demo video uploaded to YouTube unlisted or Google Drive
-- [ ] Submit through: https://forms.gle/bTCqepJRpJYqYvkH6
+The app can be deployed on Vercel from the `fairspace/frontend` folder. Make sure the Vercel project has these environment variables:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
+
+If Vercel shows a warning about `outputFileTracingRoot` and `turbopack.root`, it is safe to leave as long as the build completes. It is a configuration warning, not a runtime failure.
+
+## Future Improvements
+
+- Add Supabase Row Level Security policies for production-grade authorization.
+- Store reports, mailbox messages, and bans in dedicated persisted tables.
+- Add email reminders for booking confirmation and missed check-ins.
+- Add automated tests for booking conflict logic and AI intent parsing.
+- Add real-time updates when another user books a slot.
