@@ -11,6 +11,40 @@ export default function AuthCallbackPage() {
   const [status, setStatus] = useState("Finishing sign-in...")
 
   useEffect(() => {
+    const verifyPortalRole = async (supabase: ReturnType<typeof createBrowserClient>, sessionUser: { id: string; user_metadata?: Record<string, unknown> }) => {
+      const selectedRole = window.localStorage.getItem("fairspace-role")
+      if (selectedRole !== "student" && selectedRole !== "admin") return true
+
+      const metadataRole =
+        sessionUser.user_metadata?.role === "admin" || sessionUser.user_metadata?.role === "student"
+          ? sessionUser.user_metadata.role
+          : undefined
+      const { data: profile, error } = await supabase
+        .from("fairspace_profiles")
+        .select("role")
+        .eq("id", sessionUser.id)
+        .maybeSingle()
+
+      if (error) {
+        await supabase.auth.signOut()
+        window.localStorage.removeItem("fairspace-role")
+        setStatus("Unable to verify your account role. Please try again.")
+        return false
+      }
+
+      const profileRole = profile?.role === "admin" || profile?.role === "student" ? profile.role : undefined
+      const actualRole = metadataRole ?? profileRole ?? selectedRole
+
+      if (actualRole !== selectedRole) {
+        await supabase.auth.signOut()
+        window.localStorage.removeItem("fairspace-role")
+        setStatus(`This account is registered as ${actualRole}. Please sign in through the ${actualRole} portal.`)
+        return false
+      }
+
+      return true
+    }
+
     const run = async () => {
       if (!hasBrowserSupabaseConfig()) {
         setStatus("Supabase public keys are missing. Add them in .env.local, then restart the dev server.")
@@ -56,6 +90,7 @@ export default function AuthCallbackPage() {
             return
           }
 
+          if (!(await verifyPortalRole(supabase, data.session.user))) return
           router.replace("/")
           return
         }
@@ -76,6 +111,7 @@ export default function AuthCallbackPage() {
         return
       }
 
+      if (!(await verifyPortalRole(supabase, exchangeData.session.user))) return
       router.replace("/")
     }
 

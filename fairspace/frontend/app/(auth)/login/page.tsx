@@ -51,6 +51,35 @@ export default function LoginPage() {
       return
     }
 
+    const metadataRole =
+      data.session.user.user_metadata?.role === "admin" || data.session.user.user_metadata?.role === "student"
+        ? data.session.user.user_metadata.role
+        : undefined
+    const { data: profile, error: profileError } = await supabase
+      .from("fairspace_profiles")
+      .select("role")
+      .eq("id", data.session.user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      await supabase.auth.signOut()
+      window.localStorage.removeItem("fairspace-role")
+      setErrorMessage("Unable to verify your account role. Please try again.")
+      setIsLoading(false)
+      return
+    }
+
+    const profileRole = profile?.role === "admin" || profile?.role === "student" ? profile.role : undefined
+    const actualRole = metadataRole ?? profileRole ?? role
+
+    if (actualRole !== role) {
+      await supabase.auth.signOut()
+      window.localStorage.removeItem("fairspace-role")
+      setErrorMessage(`This account is registered as ${actualRole}. Please sign in through the ${actualRole} portal.`)
+      setIsLoading(false)
+      return
+    }
+
     window.localStorage.setItem("fairspace-role", role)
     router.push("/")
   }
@@ -66,6 +95,7 @@ export default function LoginPage() {
 
     const supabase = createBrowserClient()
     const redirectTo = `${window.location.origin}/auth/callback`
+    window.localStorage.setItem("fairspace-role", role)
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
