@@ -1103,31 +1103,33 @@ export default function BookingSystemApp() {
   return (
     <main className="min-h-screen bg-[#f5f7f4] text-[#18201d]">
       <header className="border-b border-[#dfe5de] bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-[#173f3a] text-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#173f3a] text-white sm:h-10 sm:w-10">
               <Building2 className="h-5 w-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-semibold">FairSpace</p>
-              <p className="text-xs text-[#66736c]">University discussion room booking with AI assistance</p>
+              <p className="max-w-[150px] truncate text-xs text-[#66736c] min-[420px]:max-w-[190px] sm:max-w-none">
+                University discussion room booking with AI assistance
+              </p>
               <p className="text-xs font-medium text-[#173f3a]">{formatDateTime(now)}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <Badge className="hidden rounded-md border-0 bg-[#fff4cf] text-[#765a00] sm:inline-flex">
               {portalRole}
             </Badge>
             <Button variant="outline" className="h-10 w-10 rounded-full p-0" onClick={() => setMailboxDialogOpen(true)}>
               <Mail className="h-4 w-4" />
             </Button>
-            <Button variant="outline" className="h-10 rounded-full px-2 pr-4" onClick={() => setProfileDialogOpen(true)}>
+            <Button variant="outline" className="h-9 rounded-full px-1.5 sm:h-10 sm:px-2 sm:pr-4" onClick={() => setProfileDialogOpen(true)}>
               <ProfileAvatar name={organizer} src={profile.avatarUrl} size="sm" />
               <span className="ml-2 hidden sm:inline">{organizer}</span>
             </Button>
-            <Button variant="outline" className="h-9 rounded-md" onClick={signOut}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign out
+            <Button variant="outline" className="h-9 w-9 rounded-md p-0 sm:w-auto sm:px-3" onClick={signOut} aria-label="Sign out" title="Sign out">
+              <LogOut className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Sign out</span>
             </Button>
           </div>
         </div>
