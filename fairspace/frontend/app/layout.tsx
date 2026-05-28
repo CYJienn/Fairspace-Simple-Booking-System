@@ -8,8 +8,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'FairSpace AI - Internship Interview Booking',
-  description: 'An AI-assisted booking system demo for internship hiring teams to schedule rooms, coordinate candidates, explain trade-offs, and manage admin review.',
+  title: 'FairSpace AI - University Room Booking',
+  description: 'A university discussion room booking system with calendar scheduling, admin controls, reporting, and a student AI booking assistant.',
   generator: 'v0.app',
   icons: {
     icon: [
