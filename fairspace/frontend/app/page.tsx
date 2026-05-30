@@ -481,19 +481,13 @@ export default function BookingSystemApp() {
     if (existingError) throw existingError
 
     if (existingProfile) {
-      const finalRole = metadataRole ?? (existingProfile.role === "admin" ? "admin" : "student")
-      let profileData = existingProfile
-      if (existingProfile.role !== finalRole) {
-        const { data, error } = await supabase
-          .from("fairspace_profiles")
-          .update({ role: finalRole })
-          .eq("id", currentUser.id)
-          .select("id, role, full_name, email, matric_id, faculty, avatar_url")
-          .single()
-
-        if (error) throw error
-        profileData = data
+      const finalRole = existingProfile.role === "admin" ? "admin" : "student"
+      if (finalRole !== requestedRole) {
+        await supabase.auth.signOut()
+        window.localStorage.removeItem("fairspace-role")
+        throw new Error(`This account is registered as ${finalRole}. Please sign in through the ${finalRole} portal.`)
       }
+      const profileData = existingProfile
 
       if (!profileData) throw new Error("Unable to load profile.")
       setProfileId(profileData.id)
@@ -510,6 +504,11 @@ export default function BookingSystemApp() {
     }
 
     const finalRole = metadataRole ?? requestedRole
+    if (finalRole !== requestedRole) {
+      await supabase.auth.signOut()
+      window.localStorage.removeItem("fairspace-role")
+      throw new Error(`This account is registered as ${finalRole}. Please sign in through the ${finalRole} portal.`)
+    }
     const { data, error } = await supabase
       .from("fairspace_profiles")
       .insert({
@@ -646,13 +645,27 @@ export default function BookingSystemApp() {
         return
       }
 
+      const requestedRole =
+        storedRole === "admin" || storedRole === "student"
+          ? storedRole
+          : data.session.user.user_metadata?.role === "admin"
+            ? "admin"
+            : "student"
+
       setUser(data.session.user)
-      await ensureProfile(data.session.user, storedRole === "admin" || data.session.user.user_metadata?.role === "admin" ? "admin" : "student")
+      await ensureProfile(data.session.user, requestedRole)
       await loadRealData()
       setAuthLoading(false)
     }
 
-    init().catch(() => {
+    init().catch((error) => {
+      const message = error?.message || "Unable to load Supabase data."
+      if (message.includes("Please sign in through")) {
+        toast.error(message)
+        router.replace("/login")
+        return
+      }
+
       toast.error("Unable to load Supabase data. Showing fallback data.")
       setDataMode("fallback")
       setAuthLoading(false)
@@ -754,7 +767,7 @@ export default function BookingSystemApp() {
       setBookings((current) => [{ id: `BK-${Math.floor(2000 + Math.random() * 7000)}`, ...next, status }, ...current])
     }
 
-    toast.success(status === "pending" ? "Longer booking request sent to admin" : "Booking created", {
+    toast.success(status === "pending" ? "Admin approval request sent" : "Booking created", {
       description: `${room.name}, ${formatDate(next.date)} ${next.start}-${next.end}`,
     })
     return true
@@ -762,13 +775,21 @@ export default function BookingSystemApp() {
 
   const requestLongerSlot = async () => {
     if (!requestMessage.trim()) {
-      toast.error("Write a short message for the admin before requesting more hours.")
+      toast.error("Write a short message for the admin before sending this request.")
       return
     }
 
     const requestedMinutes = minutes(requestEnd) - minutes(requestStart)
-    if (requestedMinutes <= MAX_STANDARD_MINUTES) {
-      toast.error("Choose a time range longer than 2 hours.")
+    if (requestedMinutes <= 0) {
+      toast.error("Choose a valid time range.")
+      return
+    }
+
+    const sameDayMinutes = userBookedMinutesForDate(bookings, profileId, selectedDate)
+    const needsAdminApproval = requestedMinutes > MAX_STANDARD_MINUTES || sameDayMinutes + requestedMinutes > MAX_STANDARD_MINUTES
+
+    if (!needsAdminApproval) {
+      toast.error("This slot is still within your normal daily limit. Use the regular booking button instead.")
       return
     }
 
@@ -778,7 +799,7 @@ export default function BookingSystemApp() {
         date: selectedDate,
         start: requestStart,
         end: requestEnd,
-        title: `${title} - longer-hours request`,
+        title: `${title} - admin approval request`,
         organizer,
         organizerAvatar: profile.avatarUrl,
         attendees,
@@ -1490,7 +1511,7 @@ export default function BookingSystemApp() {
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
             <Button variant="outline" className="rounded-md" onClick={() => setRequestDialogOpen(true)}>
-              Ask admin for more hours
+              Ask admin approval
             </Button>
             <Button
               className="rounded-md bg-[#173f3a] hover:bg-[#24534d]"
@@ -1508,9 +1529,9 @@ export default function BookingSystemApp() {
       <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
         <DialogContent className="rounded-md sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Request longer booking</DialogTitle>
+            <DialogTitle>Request admin approval</DialogTitle>
             <DialogDescription>
-              Send the admin a reason for booking {roomName(selectedRoom)} for more than 2 hours.
+              Send the admin a reason when this booking needs approval outside the normal 2-hour daily limit.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1539,7 +1560,7 @@ export default function BookingSystemApp() {
               <Textarea
                 value={requestMessage}
                 onChange={(event) => setRequestMessage(event.target.value)}
-                placeholder="Explain why your group needs more than 2 hours..."
+                placeholder="Explain why your group needs this extra booking time..."
                 className="min-h-28 rounded-md border-[#d5ddd6]"
               />
             </Field>
