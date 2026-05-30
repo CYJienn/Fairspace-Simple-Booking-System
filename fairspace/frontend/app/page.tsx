@@ -976,6 +976,11 @@ export default function BookingSystemApp() {
     toast.success(decision === "approved" ? "Report approved" : "Report rejected")
   }
 
+  const removeReportTicket = (reportId: string) => {
+    setReports((current) => current.filter((report) => report.id !== reportId))
+    toast.success("Report ticket removed")
+  }
+
   const updateRoom = async (roomId: string, patch: Partial<Room>) => {
     setRooms((current) => current.map((room) => (room.id === roomId ? { ...room, ...patch } : room)))
 
@@ -1497,9 +1502,18 @@ export default function BookingSystemApp() {
                             </div>
                           </div>
                         ) : (
-                          <div className="mt-3 rounded-md bg-[#f8faf7] p-3 text-sm text-[#4d5a53]">
-                            {report.removedBooking && <p className="font-medium text-[#b42318]">Reported booking removed.</p>}
-                            <p>Reply: {report.reply || "No reason provided."}</p>
+                          <div className="mt-3 space-y-3">
+                            <div className="rounded-md bg-[#f8faf7] p-3 text-sm text-[#4d5a53]">
+                              {report.removedBooking && <p className="font-medium text-[#b42318]">Reported booking removed.</p>}
+                              <p>Reply: {report.reply || "No reason provided."}</p>
+                            </div>
+                            <Button
+                              variant="outline"
+                              className="rounded-md border-[#f3b4ad] text-[#b42318] hover:bg-[#fff1ef] hover:text-[#8f1d14]"
+                              onClick={() => removeReportTicket(report.id)}
+                            >
+                              Remove ticket
+                            </Button>
                           </div>
                         )}
                       </div>
