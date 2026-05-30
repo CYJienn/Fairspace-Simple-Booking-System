@@ -318,7 +318,7 @@ function isBookingFollowUp(message: string, history: RequestBody["history"] = []
   if (!hasBookingContext(history)) return false
   return (
     parseTimeRange(message) !== undefined ||
-    /\b(yes|yeah|yep|ok|okay|please|can\?|can ah|can or not|that one|this one|best one|same one|2 hours?|two hours?|1 hour|one hour|from\s+\d|to\s+\d)\b/.test(lower)
+    /\b(yes|yeah|yep|ok|okay|please|can\?|can ah|can or not|that one|this one|best one|best option|recommended one|same one|go with|use that|choose that|2 hours?|two hours?|1 hour|one hour|from\s+\d|to\s+\d)\b/.test(lower)
   )
 }
 
@@ -328,7 +328,7 @@ function wantsToCreate(message: string, history: RequestBody["history"] = []) {
   return (
     /^(book|reserve|create)\b/.test(lower) ||
     /\b(book me|book for me|allow me to book|want to book|i want to book|click button)\b/.test(lower) ||
-    (hasBookingContext(history) && /\b(yes|yes please|yep|yeah|ok|okay|please confirm|confirm it|go ahead)\b/.test(lower)) ||
+    (hasBookingContext(history) && /\b(yes|yes please|yep|yeah|ok|okay|please confirm|confirm it|go ahead|go with|best option|best one|recommended one|use that|choose that)\b/.test(lower)) ||
     /\b(please|help me|can you)\s+(book|reserve|create)\s+(discussion\s+)?room\s+\d+\b/.test(lower) ||
     /\b(book|reserve|create)\s+(discussion\s+)?room\s+\d+\b/.test(lower)
   )
@@ -439,7 +439,7 @@ function plannerReply(message: string, context: Required<RequestBody>["context"]
     }
   }
 
-  if (wantsBookingHelp(message)) {
+  if (wantsBookingHelp(message) || isBookingFollowUp(message, history)) {
     if (userBookedMinutesForDate(bookings, context.currentProfileId, date) >= MAX_STANDARD_MINUTES) {
       return {
         reply: `You already have 2 hours booked on ${dateLabel(date)}, so I cannot suggest another normal slot for that day. You can choose another date or request admin approval for extra time.`,
