@@ -135,8 +135,9 @@ type AdminReport = {
   booking?: Booking | null
   reporter: string
   createdAt: string
-  status: "open" | "resolved"
+  status: "open" | "approved" | "rejected" | "resolved"
   reply?: string
+  removedBooking?: boolean
 }
 
 type MailMessage = {
@@ -272,6 +273,7 @@ const times = [
 ]
 const MAX_STANDARD_MINUTES = 120
 const ROLE_MISMATCH_MESSAGE = "This account is either not registered or the selected portal is incorrect."
+const REPORT_STORAGE_KEY = "fairspace-admin-reports"
 
 const statusStyle: Record<BookingStatus, string> = {
   confirmed: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -288,6 +290,19 @@ function minutes(time: string) {
 function addMinutes(time: string, amount: number) {
   const total = minutes(time) + amount
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
+}
+
+function loadStoredReports() {
+  if (typeof window === "undefined") return []
+
+  try {
+    const raw = window.localStorage.getItem(REPORT_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as AdminReport[]) : []
+  } catch {
+    return []
+  }
 }
 
 function durationMinutes(booking: Pick<Booking, "start" | "end">) {
@@ -410,11 +425,12 @@ export default function BookingSystemApp() {
   const [reportMessage, setReportMessage] = useState("")
   const [reportPhoto, setReportPhoto] = useState("")
   const [reportBooking, setReportBooking] = useState<Booking | null>(null)
-  const [reports, setReports] = useState<AdminReport[]>([])
+  const [reports, setReports] = useState<AdminReport[]>(loadStoredReports)
   const [mailMessages, setMailMessages] = useState<MailMessage[]>([])
   const [removalTarget, setRemovalTarget] = useState<Booking | null>(null)
   const [removalReason, setRemovalReason] = useState("")
   const [reportReply, setReportReply] = useState<Record<string, string>>({})
+  const [reportRemoveBooking, setReportRemoveBooking] = useState<Record<string, boolean>>({})
   const [banEmail, setBanEmail] = useState("")
   const [banMonths, setBanMonths] = useState(1)
   const [banReason, setBanReason] = useState("")
@@ -597,6 +613,10 @@ export default function BookingSystemApp() {
     const timer = window.setInterval(() => setNow(new Date()), 1000)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(reports))
+  }, [reports])
 
   useEffect(() => {
     if (portalRole !== "student" || !chatOpen || aiWarmStartedRef.current) return
@@ -913,24 +933,47 @@ export default function BookingSystemApp() {
     setReportPhoto("")
   }
 
-  const resolveReport = (report: AdminReport) => {
+  const decideReport = async (report: AdminReport, decision: "approved" | "rejected") => {
     const reply = reportReply[report.id]?.trim()
-    if (!reply) {
-      toast.error("Write a reply before resolving this report.")
-      return
+    const shouldRemoveBooking = decision === "approved" && reportRemoveBooking[report.id] && report.booking
+
+    if (shouldRemoveBooking && report.booking) {
+      await updateStatus(report.booking.id, "cancelled")
     }
 
-    setReports((current) => current.map((item) => (item.id === report.id ? { ...item, status: "resolved", reply } : item)))
+    setReports((current) =>
+      current.map((item) =>
+        item.id === report.id
+          ? { ...item, status: decision, reply, removedBooking: Boolean(shouldRemoveBooking) }
+          : item,
+      ),
+    )
     setMailMessages((current) => [
       {
         id: crypto.randomUUID(),
-        title: `Report resolved: ${report.type}`,
-        body: reply,
+        title: `Report ${decision}: ${report.type}`,
+        body:
+          reply ||
+          (decision === "approved"
+            ? shouldRemoveBooking
+              ? "Your report was approved and the reported booking was removed."
+              : "Your report was approved. The admin reviewed it and kept the booking unchanged."
+            : "Your report was reviewed and rejected."),
         createdAt: formatDateTime(new Date()),
       },
       ...current,
     ])
-    toast.success("Report resolved")
+    setReportReply((current) => {
+      const next = { ...current }
+      delete next[report.id]
+      return next
+    })
+    setReportRemoveBooking((current) => {
+      const next = { ...current }
+      delete next[report.id]
+      return next
+    })
+    toast.success(decision === "approved" ? "Report approved" : "Report rejected")
   }
 
   const updateRoom = async (roomId: string, patch: Partial<Room>) => {
@@ -1259,6 +1302,7 @@ export default function BookingSystemApp() {
                 rooms={rooms}
                 bookings={bookings}
                 portalRole={portalRole}
+                profileId={profileId}
                 selectedDate={selectedDate}
                 setSelectedDate={setSelectedDate}
                 onPickSlot={(roomId, date, slot) => {
@@ -1415,7 +1459,17 @@ export default function BookingSystemApp() {
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="font-semibold">{report.type}</p>
-                              <Badge className={cn("rounded-md border-0", report.status === "open" ? "bg-[#fff4cf] text-[#765a00]" : "bg-[#e7f4ef] text-[#19624f]")}>{report.status}</Badge>
+                              <Badge
+                                className={cn(
+                                  "rounded-md border-0",
+                                  report.status === "open" && "bg-[#fff4cf] text-[#765a00]",
+                                  report.status === "approved" && "bg-[#e7f4ef] text-[#19624f]",
+                                  report.status === "rejected" && "bg-[#fff1ef] text-[#b42318]",
+                                  report.status === "resolved" && "bg-[#e7f4ef] text-[#19624f]",
+                                )}
+                              >
+                                {report.status}
+                              </Badge>
                             </div>
                             <p className="mt-1 text-sm text-[#66736c]">From {report.reporter} - {report.createdAt}</p>
                             {report.booking && <p className="mt-1 text-sm text-[#66736c]">{roomName(report.booking.roomId)} - {formatDate(report.booking.date)} - {report.booking.start}-{report.booking.end}</p>}
@@ -1424,12 +1478,29 @@ export default function BookingSystemApp() {
                           </div>
                         </div>
                         {report.status === "open" ? (
-                          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-                            <Input value={reportReply[report.id] ?? ""} onChange={(event) => setReportReply((current) => ({ ...current, [report.id]: event.target.value }))} placeholder="Reply to student before resolving" className="rounded-md border-[#d5ddd6]" />
-                            <Button className="rounded-md bg-[#173f3a] hover:bg-[#24534d]" onClick={() => resolveReport(report)}>Resolve</Button>
+                          <div className="mt-4 space-y-3">
+                            <Input value={reportReply[report.id] ?? ""} onChange={(event) => setReportReply((current) => ({ ...current, [report.id]: event.target.value }))} placeholder="Optional reply to student" className="rounded-md border-[#d5ddd6]" />
+                            {report.booking && (
+                              <label className="flex items-center gap-2 text-sm text-[#4d5a53]">
+                                <input
+                                  type="checkbox"
+                                  checked={reportRemoveBooking[report.id] ?? false}
+                                  onChange={(event) => setReportRemoveBooking((current) => ({ ...current, [report.id]: event.target.checked }))}
+                                  className="h-4 w-4 rounded border-[#d5ddd6]"
+                                />
+                                Remove the reported booking if this report is approved
+                              </label>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              <Button className="rounded-md bg-[#173f3a] hover:bg-[#24534d]" onClick={() => decideReport(report, "approved")}>Approve report</Button>
+                              <Button variant="outline" className="rounded-md border-[#f3b4ad] text-[#b42318] hover:bg-[#fff1ef] hover:text-[#8f1d14]" onClick={() => decideReport(report, "rejected")}>Reject report</Button>
+                            </div>
                           </div>
                         ) : (
-                          <p className="mt-3 rounded-md bg-[#f8faf7] p-3 text-sm text-[#4d5a53]">Reply: {report.reply}</p>
+                          <div className="mt-3 rounded-md bg-[#f8faf7] p-3 text-sm text-[#4d5a53]">
+                            {report.removedBooking && <p className="font-medium text-[#b42318]">Reported booking removed.</p>}
+                            <p>Reply: {report.reply || "No reason provided."}</p>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -2202,6 +2273,7 @@ function CalendarView({
   rooms,
   bookings,
   portalRole,
+  profileId,
   selectedDate,
   setSelectedDate,
   onPickSlot,
@@ -2211,6 +2283,7 @@ function CalendarView({
   rooms: Room[]
   bookings: Booking[]
   portalRole: "student" | "admin"
+  profileId: string
   selectedDate: string
   setSelectedDate: (date: string) => void
   onPickSlot: (roomId: string, date: string, slot: string) => void
@@ -2219,6 +2292,10 @@ function CalendarView({
 }) {
   const [roomSearch, setRoomSearch] = useState("")
   const [datePickerOpen, setDatePickerOpen] = useState(false)
+  const markedDates =
+    portalRole === "student"
+      ? bookings.filter((booking) => booking.status !== "cancelled" && booking.organizerId === profileId).map((booking) => booking.date)
+      : []
   const activeRooms = rooms.filter((room) => {
     const searchText = `${room.name} ${room.building} ${room.floor} ${room.amenities.join(" ")}`.toLowerCase()
     return room.status === "available" && searchText.includes(roomSearch.toLowerCase())
@@ -2345,7 +2422,7 @@ function CalendarView({
                 setSelectedDate(date)
                 setDatePickerOpen(false)
               }}
-              markedDates={bookings.filter((booking) => booking.status !== "cancelled").map((booking) => booking.date)}
+              markedDates={markedDates}
               frameless
             />
           </div>
