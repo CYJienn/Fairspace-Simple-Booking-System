@@ -133,6 +133,7 @@ type AdminReport = {
   message: string
   photo?: string
   booking?: Booking | null
+  reporterId?: string
   reporter: string
   createdAt: string
   status: "open" | "approved" | "rejected" | "resolved"
@@ -142,9 +143,12 @@ type AdminReport = {
 
 type MailMessage = {
   id: string
+  recipientId?: string
+  recipientRole?: "student" | "admin"
   title: string
   body: string
   createdAt: string
+  read?: boolean
 }
 
 const fallbackRooms: Room[] = [
@@ -274,6 +278,8 @@ const times = [
 const MAX_STANDARD_MINUTES = 120
 const ROLE_MISMATCH_MESSAGE = "This account is either not registered or the selected portal is incorrect."
 const REPORT_STORAGE_KEY = "fairspace-admin-reports"
+const MAIL_STORAGE_KEY = "fairspace-mail-messages"
+const DISMISSED_ADMIN_MAIL_STORAGE_KEY = "fairspace-dismissed-admin-mail"
 
 const statusStyle: Record<BookingStatus, string> = {
   confirmed: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -300,6 +306,32 @@ function loadStoredReports() {
     if (!raw) return []
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? (parsed as AdminReport[]) : []
+  } catch {
+    return []
+  }
+}
+
+function loadStoredMailMessages() {
+  if (typeof window === "undefined") return []
+
+  try {
+    const raw = window.localStorage.getItem(MAIL_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as MailMessage[]) : []
+  } catch {
+    return []
+  }
+}
+
+function loadDismissedAdminMail() {
+  if (typeof window === "undefined") return []
+
+  try {
+    const raw = window.localStorage.getItem(DISMISSED_ADMIN_MAIL_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as string[]) : []
   } catch {
     return []
   }
@@ -426,7 +458,8 @@ export default function BookingSystemApp() {
   const [reportPhoto, setReportPhoto] = useState("")
   const [reportBooking, setReportBooking] = useState<Booking | null>(null)
   const [reports, setReports] = useState<AdminReport[]>(loadStoredReports)
-  const [mailMessages, setMailMessages] = useState<MailMessage[]>([])
+  const [mailMessages, setMailMessages] = useState<MailMessage[]>(loadStoredMailMessages)
+  const [dismissedAdminMail, setDismissedAdminMail] = useState<string[]>(loadDismissedAdminMail)
   const [removalTarget, setRemovalTarget] = useState<Booking | null>(null)
   const [removalReason, setRemovalReason] = useState("")
   const [reportReply, setReportReply] = useState<Record<string, string>>({})
@@ -477,6 +510,21 @@ export default function BookingSystemApp() {
     .sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`))
 
   const pending = metricBookings.filter((booking) => booking.status === "pending").length
+  const openReportCount = reports.filter((report) => report.status === "open").length
+  const latestPendingId = metricBookings.find((booking) => booking.status === "pending")?.id ?? "none"
+  const latestOpenReportId = reports.find((report) => report.status === "open")?.id ?? "none"
+  const adminPendingMailKey = `pending:${pending}:${latestPendingId}`
+  const adminReportsMailKey = `reports:${openReportCount}:${latestOpenReportId}`
+  const visibleMailMessages = mailMessages.filter((message) => {
+    if (portalRole === "admin") return message.recipientRole === "admin"
+    return message.recipientId === profileId || (!message.recipientId && message.recipientRole === "student")
+  })
+  const adminSummaryUnread =
+    portalRole === "admin"
+      ? Number(pending > 0 && !dismissedAdminMail.includes(adminPendingMailKey)) +
+        Number(openReportCount > 0 && !dismissedAdminMail.includes(adminReportsMailKey))
+      : 0
+  const unreadMailCount = visibleMailMessages.filter((message) => !message.read).length + adminSummaryUnread
 
   const roomName = (roomId: string) => rooms.find((room) => room.id === roomId)?.name ?? "Unknown room"
 
@@ -617,6 +665,14 @@ export default function BookingSystemApp() {
   useEffect(() => {
     window.localStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(reports))
   }, [reports])
+
+  useEffect(() => {
+    window.localStorage.setItem(MAIL_STORAGE_KEY, JSON.stringify(mailMessages))
+  }, [mailMessages])
+
+  useEffect(() => {
+    window.localStorage.setItem(DISMISSED_ADMIN_MAIL_STORAGE_KEY, JSON.stringify(dismissedAdminMail))
+  }, [dismissedAdminMail])
 
   useEffect(() => {
     if (portalRole !== "student" || !chatOpen || aiWarmStartedRef.current) return
@@ -906,6 +962,29 @@ export default function BookingSystemApp() {
     setReportDialogOpen(true)
   }
 
+  const openMailbox = () => {
+    setMailboxDialogOpen(true)
+    setMailMessages((current) =>
+      current.map((message) =>
+        portalRole === "student"
+          ? message.recipientId === profileId || (!message.recipientId && message.recipientRole === "student")
+            ? { ...message, read: true }
+            : message
+          : message.recipientRole === "admin"
+            ? { ...message, read: true }
+            : message,
+      ),
+    )
+  }
+
+  const dismissAdminMailboxSummary = (key: string) => {
+    setDismissedAdminMail((current) => (current.includes(key) ? current : [...current, key]))
+  }
+
+  const deleteMailMessage = (messageId: string) => {
+    setMailMessages((current) => current.filter((message) => message.id !== messageId))
+  }
+
   const submitReport = () => {
     if (!reportMessage.trim()) {
       toast.error("Write a short report message for the admin.")
@@ -918,6 +997,7 @@ export default function BookingSystemApp() {
       message: reportMessage.trim(),
       photo: reportPhoto,
       booking: reportBooking,
+      reporterId: profileId,
       reporter: organizer,
       createdAt: formatDateTime(new Date()),
       status: "open",
@@ -951,6 +1031,8 @@ export default function BookingSystemApp() {
     setMailMessages((current) => [
       {
         id: crypto.randomUUID(),
+        recipientId: report.reporterId,
+        recipientRole: "student",
         title: `Report ${decision}: ${report.type}`,
         body:
           reply ||
@@ -960,6 +1042,7 @@ export default function BookingSystemApp() {
               : "Your report was approved. The admin reviewed it and kept the booking unchanged."
             : "Your report was reviewed and rejected."),
         createdAt: formatDateTime(new Date()),
+        read: false,
       },
       ...current,
     ])
@@ -1008,15 +1091,6 @@ export default function BookingSystemApp() {
       return
     }
 
-    setMailMessages((current) => [
-      {
-        id: crypto.randomUUID(),
-        title: "User ban recorded",
-        body: `${banEmail} banned for ${banMonths} month(s). Reason: ${banReason}`,
-        createdAt: formatDateTime(new Date()),
-      },
-      ...current,
-    ])
     toast.success("Ban recorded")
     setBanEmail("")
     setBanMonths(1)
@@ -1118,9 +1192,12 @@ export default function BookingSystemApp() {
     setMailMessages((current) => [
       {
         id: crypto.randomUUID(),
+        recipientId: removalTarget.organizerId,
+        recipientRole: "student",
         title: "Booking removed",
         body: `${removalTarget.title} (${roomName(removalTarget.roomId)}, ${formatDate(removalTarget.date)} ${removalTarget.start}-${removalTarget.end}) was removed. Reason: ${removalReason.trim() || "Cancelled by user."}`,
         createdAt: formatDateTime(new Date()),
+        read: false,
       },
       ...current,
     ])
@@ -1240,8 +1317,9 @@ export default function BookingSystemApp() {
             <Badge className="hidden rounded-md border-0 bg-[#fff4cf] text-[#765a00] sm:inline-flex">
               {portalRole}
             </Badge>
-            <Button variant="outline" className="h-10 w-10 rounded-full p-0" onClick={() => setMailboxDialogOpen(true)}>
+            <Button variant="outline" className="relative h-10 w-10 rounded-full p-0" onClick={openMailbox}>
               <Mail className="h-4 w-4" />
+              {unreadMailCount > 0 && <CountBadge value={unreadMailCount} />}
             </Button>
             <Button variant="outline" className="h-9 rounded-full px-1.5 sm:h-10 sm:px-2 sm:pr-4" onClick={() => setProfileDialogOpen(true)}>
               <ProfileAvatar name={organizer} src={profile.avatarUrl} size="sm" />
@@ -1965,34 +2043,55 @@ export default function BookingSystemApp() {
           <DialogHeader>
             <DialogTitle>Mailbox</DialogTitle>
             <DialogDescription>
-              Any follow up admin messages will appear here.
+              {portalRole === "admin" ? "New approval and report summaries appear here." : "Admin decisions and follow-up messages appear here."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            {portalRole === "admin" && reports.filter((report) => report.status === "open").map((report) => (
-              <div key={report.id} className="rounded-md border border-[#dfe5de] bg-[#f8faf7] p-4">
-                <p className="font-semibold">{report.type}</p>
-                <p className="mt-1 text-sm text-[#66736c]">{report.createdAt} - {report.reporter}</p>
-                <p className="mt-2 text-sm">{report.message}</p>
+            {portalRole === "admin" && pending > 0 && !dismissedAdminMail.includes(adminPendingMailKey) && (
+              <div className="rounded-md border border-[#dfe5de] bg-[#fff9df] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">Pending approvals</p>
+                    <p className="mt-1 text-sm text-[#66736c]">{pending} booking request{pending === 1 ? "" : "s"} need admin review.</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="rounded-md" onClick={() => dismissAdminMailboxSummary(adminPendingMailKey)}>
+                    Remove
+                  </Button>
+                </div>
               </div>
-            ))}
-            {portalRole === "admin" && bookings.filter((booking) => booking.status === "pending").map((booking) => (
-              <div key={booking.id} className="rounded-md border border-[#dfe5de] bg-[#fff9df] p-4">
-                <p className="font-semibold">Pending request</p>
-                <p className="mt-1 text-sm text-[#66736c]">{booking.title} - {formatDate(booking.date)} {booking.start}-{booking.end}</p>
-              </div>
-            ))}
-            {mailMessages.map((message) => (
-              <div key={message.id} className="rounded-md border border-[#dfe5de] bg-[#f8faf7] p-4">
-                <p className="font-semibold">{message.title}</p>
-                <p className="mt-1 text-xs text-[#66736c]">{message.createdAt}</p>
-                <p className="mt-2 text-sm">{message.body}</p>
-              </div>
-            ))}
-            {mailMessages.length === 0 && !(portalRole === "admin" && (reports.some((report) => report.status === "open") || bookings.some((booking) => booking.status === "pending"))) && (
+            )}
+            {portalRole === "admin" && openReportCount > 0 && !dismissedAdminMail.includes(adminReportsMailKey) && (
               <div className="rounded-md border border-[#dfe5de] bg-[#f8faf7] p-4">
-                <p className="font-semibold">No new admin messages</p>
-                <p className="mt-1 text-sm text-[#66736c]">Any follow up admin messages will appear here.</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">Student reports</p>
+                    <p className="mt-1 text-sm text-[#66736c]">{openReportCount} report{openReportCount === 1 ? "" : "s"} need admin review.</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="rounded-md" onClick={() => dismissAdminMailboxSummary(adminReportsMailKey)}>
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            )}
+            {visibleMailMessages.map((message) => (
+              <div key={message.id} className="rounded-md border border-[#dfe5de] bg-[#f8faf7] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{message.title}</p>
+                    <p className="mt-1 text-xs text-[#66736c]">{message.createdAt}</p>
+                    <p className="mt-2 text-sm">{message.body}</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="rounded-md" onClick={() => deleteMailMessage(message.id)}>
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {visibleMailMessages.length === 0 &&
+              !(portalRole === "admin" && ((pending > 0 && !dismissedAdminMail.includes(adminPendingMailKey)) || (openReportCount > 0 && !dismissedAdminMail.includes(adminReportsMailKey)))) && (
+              <div className="rounded-md border border-[#dfe5de] bg-[#f8faf7] p-4">
+                <p className="font-semibold">No mail</p>
+                <p className="mt-1 text-sm text-[#66736c]">{portalRole === "admin" ? "No new approval or report summaries." : "Any follow up admin messages will appear here."}</p>
               </div>
             )}
           </div>
