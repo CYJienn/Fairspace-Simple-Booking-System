@@ -7,6 +7,7 @@ import { createBrowserClient, hasBrowserSupabaseConfig } from "@/lib/supabase/br
 import { Button } from "@/components/ui/button"
 
 type PortalRole = "student" | "admin"
+const roleMismatchMessage = "This account is either not registered or the selected portal is incorrect."
 
 function isPortalRole(value: unknown): value is PortalRole {
   return value === "student" || value === "admin"
@@ -49,7 +50,7 @@ export default function AuthCallbackPage() {
       if (actualRole !== selectedRole) {
         await supabase.auth.signOut()
         window.localStorage.removeItem("fairspace-role")
-        setStatus(`This account is registered as ${actualRole}. Please sign in through the ${actualRole} portal.`)
+        setStatus(roleMismatchMessage)
         return false
       }
 

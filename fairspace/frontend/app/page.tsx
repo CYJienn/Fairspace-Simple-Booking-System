@@ -271,6 +271,7 @@ const times = [
   "18:30",
 ]
 const MAX_STANDARD_MINUTES = 120
+const ROLE_MISMATCH_MESSAGE = "This account is either not registered or the selected portal is incorrect."
 
 const statusStyle: Record<BookingStatus, string> = {
   confirmed: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -485,7 +486,7 @@ export default function BookingSystemApp() {
       if (finalRole !== requestedRole) {
         await supabase.auth.signOut()
         window.localStorage.removeItem("fairspace-role")
-        throw new Error(`This account is registered as ${finalRole}. Please sign in through the ${finalRole} portal.`)
+        throw new Error(ROLE_MISMATCH_MESSAGE)
       }
       const profileData = existingProfile
 
@@ -507,7 +508,7 @@ export default function BookingSystemApp() {
     if (finalRole !== requestedRole) {
       await supabase.auth.signOut()
       window.localStorage.removeItem("fairspace-role")
-      throw new Error(`This account is registered as ${finalRole}. Please sign in through the ${finalRole} portal.`)
+      throw new Error(ROLE_MISMATCH_MESSAGE)
     }
     const { data, error } = await supabase
       .from("fairspace_profiles")
@@ -660,7 +661,7 @@ export default function BookingSystemApp() {
 
     init().catch((error) => {
       const message = error?.message || "Unable to load Supabase data."
-      if (message.includes("Please sign in through")) {
+      if (message === ROLE_MISMATCH_MESSAGE) {
         toast.error(message)
         router.replace("/login")
         return
