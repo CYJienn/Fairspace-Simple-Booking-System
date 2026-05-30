@@ -11,6 +11,7 @@ import { createBrowserClient, hasBrowserSupabaseConfig } from "@/lib/supabase/br
 import { Building2, Eye, EyeOff, ArrowLeft, Loader2, ShieldCheck, GraduationCap } from "lucide-react"
 
 type PortalRole = "student" | "admin"
+const roleMismatchMessage = "This account is either not registered or the selected portal is incorrect."
 
 function isPortalRole(value: unknown): value is PortalRole {
   return value === "student" || value === "admin"
@@ -87,7 +88,7 @@ export default function LoginPage() {
     if (actualRole !== role) {
       await supabase.auth.signOut()
       window.localStorage.removeItem("fairspace-role")
-      setErrorMessage(`This account is registered as ${actualRole}. Please sign in through the ${actualRole} portal.`)
+      setErrorMessage(roleMismatchMessage)
       setIsLoading(false)
       return
     }
