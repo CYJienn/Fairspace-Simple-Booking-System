@@ -2479,6 +2479,7 @@ function BookingCard({
           <Badge className={cn("rounded-md border", statusStyle[booking.status])}>{booking.status}</Badge>
         </div>
         <div className="mb-4 flex flex-wrap gap-3 text-sm text-[#66736c]">
+          <span className="flex items-center gap-1"><CalendarDays className="h-4 w-4" />{formatDate(booking.date)}</span>
           <span className="flex items-center gap-1"><Clock3 className="h-4 w-4" />{booking.start}-{booking.end}</span>
           <span className="flex items-center gap-1"><Users className="h-4 w-4" />{booking.attendees} people</span>
           <span className="flex items-center gap-1"><DoorOpen className="h-4 w-4" />{booking.organizer}</span>
