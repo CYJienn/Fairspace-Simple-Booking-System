@@ -10,12 +10,18 @@ import { Label } from "@/components/ui/label"
 import { createBrowserClient, hasBrowserSupabaseConfig } from "@/lib/supabase/browser-client"
 import { Building2, Eye, EyeOff, ArrowLeft, Loader2, ShieldCheck, GraduationCap } from "lucide-react"
 
+type PortalRole = "student" | "admin"
+
+function isPortalRole(value: unknown): value is PortalRole {
+  return value === "student" || value === "admin"
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
-  const [role, setRole] = useState<"student" | "admin">("student")
+  const [role, setRole] = useState<PortalRole>("student")
   const isSupabaseReady = hasBrowserSupabaseConfig()
   const [formData, setFormData] = useState({
     email: "",
@@ -51,14 +57,12 @@ export default function LoginPage() {
       return
     }
 
-    const metadataRole =
-      data.session.user.user_metadata?.role === "admin" || data.session.user.user_metadata?.role === "student"
-        ? data.session.user.user_metadata.role
-        : undefined
+    const metadataRole = isPortalRole(data.session.user.user_metadata?.role) ? data.session.user.user_metadata.role : undefined
     const { data: profile, error: profileError } = await supabase
       .from("fairspace_profiles")
       .select("role")
-      .eq("id", data.session.user.id)
+      .or(`id.eq.${data.session.user.id},email.eq.${formData.email.trim().toLowerCase()}`)
+      .limit(1)
       .maybeSingle()
 
     if (profileError) {
@@ -69,8 +73,16 @@ export default function LoginPage() {
       return
     }
 
-    const profileRole = profile?.role === "admin" || profile?.role === "student" ? profile.role : undefined
-    const actualRole = metadataRole ?? profileRole ?? role
+    const profileRole = isPortalRole(profile?.role) ? profile.role : undefined
+    const actualRole = profileRole ?? metadataRole
+
+    if (!actualRole) {
+      await supabase.auth.signOut()
+      window.localStorage.removeItem("fairspace-role")
+      setErrorMessage("Unable to verify this account role. Please sign up again or contact an admin.")
+      setIsLoading(false)
+      return
+    }
 
     if (actualRole !== role) {
       await supabase.auth.signOut()

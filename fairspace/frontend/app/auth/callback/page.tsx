@@ -6,23 +6,27 @@ import Link from "next/link"
 import { createBrowserClient, hasBrowserSupabaseConfig } from "@/lib/supabase/browser-client"
 import { Button } from "@/components/ui/button"
 
+type PortalRole = "student" | "admin"
+
+function isPortalRole(value: unknown): value is PortalRole {
+  return value === "student" || value === "admin"
+}
+
 export default function AuthCallbackPage() {
   const router = useRouter()
   const [status, setStatus] = useState("Finishing sign-in...")
 
   useEffect(() => {
-    const verifyPortalRole = async (supabase: ReturnType<typeof createBrowserClient>, sessionUser: { id: string; user_metadata?: Record<string, unknown> }) => {
+    const verifyPortalRole = async (supabase: ReturnType<typeof createBrowserClient>, sessionUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }) => {
       const selectedRole = window.localStorage.getItem("fairspace-role")
       if (selectedRole !== "student" && selectedRole !== "admin") return true
 
-      const metadataRole =
-        sessionUser.user_metadata?.role === "admin" || sessionUser.user_metadata?.role === "student"
-          ? sessionUser.user_metadata.role
-          : undefined
+      const metadataRole = isPortalRole(sessionUser.user_metadata?.role) ? sessionUser.user_metadata.role : undefined
       const { data: profile, error } = await supabase
         .from("fairspace_profiles")
-        .select("role")
-        .eq("id", sessionUser.id)
+        .select("role, email")
+        .or(`id.eq.${sessionUser.id},email.eq.${String(sessionUser.email ?? "").toLowerCase()}`)
+        .limit(1)
         .maybeSingle()
 
       if (error) {
@@ -32,8 +36,15 @@ export default function AuthCallbackPage() {
         return false
       }
 
-      const profileRole = profile?.role === "admin" || profile?.role === "student" ? profile.role : undefined
-      const actualRole = metadataRole ?? profileRole ?? selectedRole
+      const profileRole = isPortalRole(profile?.role) ? profile.role : undefined
+      const actualRole = profileRole ?? metadataRole
+
+      if (!actualRole) {
+        await supabase.auth.signOut()
+        window.localStorage.removeItem("fairspace-role")
+        setStatus("Unable to verify this account role. Please create an account first.")
+        return false
+      }
 
       if (actualRole !== selectedRole) {
         await supabase.auth.signOut()
