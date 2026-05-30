@@ -9,6 +9,8 @@ import {
   CalendarDays,
   Camera,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   DoorOpen,
   Loader2,
@@ -342,6 +344,37 @@ function hasConflictExcept(bookings: Booking[], booking: Pick<Booking, "roomId" 
   return bookings.some((item) => item.id !== ignoredId && overlaps(item, booking))
 }
 
+function hasUserTimeConflict(
+  bookings: Booking[],
+  booking: Pick<Booking, "date" | "start" | "end">,
+  organizerId: string,
+  ignoredId?: string,
+) {
+  if (!organizerId) return false
+  return bookings.some(
+    (item) =>
+      item.id !== ignoredId &&
+      item.organizerId === organizerId &&
+      item.date === booking.date &&
+      item.status !== "cancelled" &&
+      minutes(booking.start) < minutes(item.end) &&
+      minutes(booking.end) > minutes(item.start),
+  )
+}
+
+function userBookedMinutesForDate(bookings: Booking[], organizerId: string, date: string, ignoredId?: string) {
+  if (!organizerId) return 0
+  return bookings
+    .filter((booking) => booking.id !== ignoredId && booking.organizerId === organizerId && booking.date === date && booking.status !== "cancelled")
+    .reduce((sum, booking) => sum + durationMinutes(booking), 0)
+}
+
+function shiftIsoDate(date: string, amount: number) {
+  const parsed = new Date(`${date}T00:00:00`)
+  parsed.setDate(parsed.getDate() + amount)
+  return toIsoDate(parsed)
+}
+
 export default function BookingSystemApp() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
@@ -580,6 +613,7 @@ export default function BookingSystemApp() {
           bookings,
           selectedDate,
           defaultOrganizer: organizer,
+          currentProfileId: profileId,
           role: portalRole,
         },
         history: [],
@@ -593,7 +627,7 @@ export default function BookingSystemApp() {
         aiWarmStartedRef.current = false
         setAiSource("fallback")
       })
-  }, [bookings, chatOpen, organizer, portalRole, rooms, selectedDate])
+  }, [bookings, chatOpen, organizer, portalRole, profileId, rooms, selectedDate])
 
   useEffect(() => {
     if (!hasBrowserSupabaseConfig()) {
@@ -639,6 +673,7 @@ export default function BookingSystemApp() {
       end: payload?.end ?? end,
       title: payload?.title ?? title,
       organizer: payload?.organizer ?? organizer,
+      organizerId: payload?.organizerId ?? profileId,
       organizerAvatar: payload?.organizerAvatar ?? profile.avatarUrl,
       attendees: payload?.attendees ?? attendees,
       requestMessage: payload?.requestMessage ?? "",
@@ -666,9 +701,12 @@ export default function BookingSystemApp() {
       return false
     }
 
-    const sameDayMinutes = bookings
-      .filter((booking) => booking.organizerId === profileId && booking.date === next.date && booking.status !== "cancelled")
-      .reduce((sum, booking) => sum + durationMinutes(booking), 0)
+    if (hasUserTimeConflict(bookings, next, next.organizerId)) {
+      toast.error("You already have another booking during this time.")
+      return false
+    }
+
+    const sameDayMinutes = userBookedMinutesForDate(bookings, next.organizerId, next.date)
 
     if (!allowLongBooking && sameDayMinutes + durationMinutes(next) > MAX_STANDARD_MINUTES) {
       toast.error("You already reached the 2-hour booking limit for this day.", {
@@ -778,6 +816,17 @@ export default function BookingSystemApp() {
 
     if (hasConflictExcept(bookings, editingBooking, editingBooking.id)) {
       toast.error("That updated time conflicts with another booking.")
+      return
+    }
+
+    if (hasUserTimeConflict(bookings, editingBooking, editingBooking.organizerId ?? "", editingBooking.id)) {
+      toast.error("This edit overlaps with another booking on your schedule.")
+      return
+    }
+
+    const sameDayMinutes = userBookedMinutesForDate(bookings, editingBooking.organizerId ?? "", editingBooking.date, editingBooking.id)
+    if (sameDayMinutes + durationMinutes(editingBooking) > MAX_STANDARD_MINUTES) {
+      toast.error("This edit would exceed your 2-hour booking limit for that day.")
       return
     }
 
@@ -1061,6 +1110,7 @@ export default function BookingSystemApp() {
             bookings,
             selectedDate,
             defaultOrganizer: organizer,
+            currentProfileId: profileId,
             role: portalRole,
           },
           history: messages.slice(-8).map((item) => ({ role: item.role, content: item.content })),
@@ -2151,6 +2201,7 @@ function CalendarView({
     const searchText = `${room.name} ${room.building} ${room.floor} ${room.amenities.join(" ")}`.toLowerCase()
     return room.status === "available" && searchText.includes(roomSearch.toLowerCase())
   })
+  const goToAdjacentDate = (amount: number) => setSelectedDate(shiftIsoDate(selectedDate, amount))
   const roomName = (roomId: string) => rooms.find((room) => room.id === roomId)?.name ?? "Unknown room"
 
   return (
@@ -2176,10 +2227,18 @@ function CalendarView({
               className="rounded-md border-[#d5ddd6] pl-9"
             />
           </div>
-            <Button variant="outline" className="rounded-md" onClick={() => setDatePickerOpen(true)}>
-              <CalendarDays className="mr-2 h-4 w-4" />
-              {formatDate(selectedDate)}
-            </Button>
+            <div className="grid grid-cols-[40px_1fr_40px] gap-2 sm:flex sm:items-center">
+              <Button variant="outline" size="icon" className="rounded-md" onClick={() => goToAdjacentDate(-1)} aria-label="Previous date" title="Previous date">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" className="rounded-md" onClick={() => setDatePickerOpen(true)}>
+                <CalendarDays className="mr-2 h-4 w-4" />
+                {formatDate(selectedDate)}
+              </Button>
+              <Button variant="outline" size="icon" className="rounded-md" onClick={() => goToAdjacentDate(1)} aria-label="Next date" title="Next date">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
             <Button variant="outline" className="rounded-md border-[#f3b4ad] text-[#b42318] hover:bg-[#fff1ef] hover:text-[#8f1d14]" onClick={onReport}>
               <Flag className="mr-2 h-4 w-4" />
               Report
