@@ -10,6 +10,7 @@ type Room = {
 
 type Booking = {
   roomId: string
+  organizerId?: string
   date: string
   start: string
   end: string
@@ -41,6 +42,7 @@ type RequestBody = {
     bookings?: Booking[]
     selectedDate?: string
     defaultOrganizer?: string
+    currentProfileId?: string
     role?: "student" | "admin"
   }
 }
@@ -58,6 +60,7 @@ const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models
 const DAY_START = 9 * 60
 const DAY_END = 18 * 60 + 30
 const SLOT_STEP = 30
+const MAX_STANDARD_MINUTES = 120
 
 function minutes(time: string) {
   const [hour, minute] = time.split(":").map(Number)
@@ -72,6 +75,29 @@ function overlaps(a: Booking, b: Pick<Booking, "roomId" | "date" | "start" | "en
   if (a.status === "cancelled") return false
   if (a.roomId !== b.roomId || a.date !== b.date) return false
   return minutes(b.start) < minutes(a.end) && minutes(b.end) > minutes(a.start)
+}
+
+function durationMinutes(booking: Pick<Booking, "start" | "end">) {
+  return Math.max(0, minutes(booking.end) - minutes(booking.start))
+}
+
+function userTimeConflict(bookings: Booking[], currentProfileId: string | undefined, date: string, start: string, end: string) {
+  if (!currentProfileId) return undefined
+  return bookings.find(
+    (booking) =>
+      booking.organizerId === currentProfileId &&
+      booking.date === date &&
+      booking.status !== "cancelled" &&
+      minutes(start) < minutes(booking.end) &&
+      minutes(end) > minutes(booking.start),
+  )
+}
+
+function userBookedMinutesForDate(bookings: Booking[], currentProfileId: string | undefined, date: string) {
+  if (!currentProfileId) return 0
+  return bookings
+    .filter((booking) => booking.organizerId === currentProfileId && booking.date === date && booking.status !== "cancelled")
+    .reduce((sum, booking) => sum + durationMinutes(booking), 0)
 }
 
 function dateLabel(date: string) {
@@ -216,7 +242,21 @@ function roomRequirementLabel(message: string) {
   return ""
 }
 
-function availableRooms(rooms: Room[], bookings: Booking[], date: string, start: string, end: string, attendees: number, requirementText = "") {
+function availableRooms(
+  rooms: Room[],
+  bookings: Booking[],
+  date: string,
+  start: string,
+  end: string,
+  attendees: number,
+  requirementText = "",
+  currentProfileId?: string,
+  allowExceedDailyLimit = false,
+) {
+  if (userTimeConflict(bookings, currentProfileId, date, start, end)) return []
+  const bookedMinutes = userBookedMinutesForDate(bookings, currentProfileId, date)
+  if (!allowExceedDailyLimit && bookedMinutes + (minutes(end) - minutes(start)) > MAX_STANDARD_MINUTES) return []
+
   const baseRooms = rooms
     .filter((room) => room.status === "available" && room.capacity >= attendees)
     .filter((room) => !bookings.some((booking) => overlaps(booking, { roomId: room.id, date, start, end })))
@@ -228,7 +268,7 @@ function availableRooms(rooms: Room[], bookings: Booking[], date: string, start:
     .sort((a, b) => a.capacity - b.capacity || a.name.localeCompare(b.name))
 }
 
-function bestSlot(rooms: Room[], bookings: Booking[], date: string, attendees: number, duration: number, message: string) {
+function bestSlot(rooms: Room[], bookings: Booking[], date: string, attendees: number, duration: number, message: string, currentProfileId?: string) {
   const lower = message.toLowerCase()
   const candidates: Array<{ start: string; end: string; rooms: Room[]; score: number }> = []
 
@@ -238,7 +278,7 @@ function bestSlot(rooms: Room[], bookings: Booking[], date: string, attendees: n
 
     const start = timeFromMinutes(startMinute)
     const end = timeFromMinutes(startMinute + duration)
-    const options = availableRooms(rooms, bookings, date, start, end, attendees, message)
+    const options = availableRooms(rooms, bookings, date, start, end, attendees, message, currentProfileId)
     if (options.length === 0) continue
 
     const middleOfDay = 13 * 60
@@ -336,13 +376,28 @@ function plannerReply(message: string, context: Required<RequestBody>["context"]
   const range = parseTimeRange(message) ?? parseTimeRange(historyText)
   const duration = range ? minutes(range.end) - minutes(range.start) : parseDuration(intentText)
   const requestedRoom = matchingRoom(message, rooms) ?? matchingRoom(intentText, rooms)
+  const currentProfileId = context.currentProfileId
 
   if (range) {
-    const options = availableRooms(rooms, bookings, date, range.start, range.end, attendees, intentText)
+    const longRequest = duration > MAX_STANDARD_MINUTES
+    const ownConflict = userTimeConflict(bookings, currentProfileId, date, range.start, range.end)
+    if (ownConflict) {
+      return {
+        reply: `You already have a booking from ${ownConflict.start} to ${ownConflict.end} on ${dateLabel(date)}, so I cannot prepare another slot that overlaps with it.`,
+      }
+    }
+
+    if (!longRequest && userBookedMinutesForDate(bookings, currentProfileId, date) + duration > MAX_STANDARD_MINUTES) {
+      return {
+        reply: `You already reached the 2-hour booking limit on ${dateLabel(date)}. I cannot create another normal booking for that day. If you really need more time, request admin approval from the booking form.`,
+      }
+    }
+
+    const options = availableRooms(rooms, bookings, date, range.start, range.end, attendees, intentText, currentProfileId, longRequest)
     const room = requestedRoom && options.some((option) => option.id === requestedRoom.id) ? requestedRoom : options[0]
 
     if (!room) {
-      const alternative = bestSlot(rooms, bookings, date, attendees, Math.min(duration, 120), message)
+      const alternative = bestSlot(rooms, bookings, date, attendees, Math.min(duration, 120), message, currentProfileId)
       return {
         reply: alternative
           ? `${dateLabel(date)} ${range.start}-${range.end} is not available for ${attendees} people. The best nearby option I found is ${alternative.start}-${alternative.end} in ${alternative.rooms[0].name}.`
@@ -350,7 +405,6 @@ function plannerReply(message: string, context: Required<RequestBody>["context"]
       }
     }
 
-    const longRequest = duration > 120
     const shouldCreate = wantsToCreate(message, history)
     const reply = shouldCreate
       ? longRequest
@@ -379,7 +433,13 @@ function plannerReply(message: string, context: Required<RequestBody>["context"]
   }
 
   if (wantsBookingHelp(message)) {
-    const recommended = bestSlot(rooms, bookings, date, attendees, Math.min(duration, 120), message)
+    if (userBookedMinutesForDate(bookings, context.currentProfileId, date) >= MAX_STANDARD_MINUTES) {
+      return {
+        reply: `You already have 2 hours booked on ${dateLabel(date)}, so I cannot suggest another normal slot for that day. You can choose another date or request admin approval for extra time.`,
+      }
+    }
+
+    const recommended = bestSlot(rooms, bookings, date, attendees, Math.min(duration, 120), message, context.currentProfileId)
     if (!recommended) {
       return { reply: `I could not find a free slot on ${dateLabel(date)} for ${attendees} people. Try a different date or fewer attendees.` }
     }
@@ -457,6 +517,7 @@ Booking rules:
 Context:
 selectedDate=${context.selectedDate}
 defaultOrganizer=${context.defaultOrganizer}
+currentProfileId=${context.currentProfileId}
 rooms=${JSON.stringify(context.rooms)}
 bookings=${JSON.stringify(context.bookings)}
 history=${JSON.stringify(history ?? [])}
@@ -499,6 +560,7 @@ export async function POST(request: Request) {
     bookings: body.context?.bookings ?? [],
     selectedDate: body.context?.selectedDate ?? "2026-06-03",
     defaultOrganizer: body.context?.defaultOrganizer ?? "Student",
+    currentProfileId: body.context?.currentProfileId,
     role: body.context?.role ?? "student",
   }
 
