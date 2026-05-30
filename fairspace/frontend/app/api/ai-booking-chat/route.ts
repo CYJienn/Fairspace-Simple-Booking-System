@@ -167,6 +167,12 @@ function parseDate(message: string, selectedDate: string) {
   return selectedDate
 }
 
+function hasDateReference(message: string) {
+  return /\b(today|tomorrow|\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)|(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s+\d{1,2})\b/i.test(
+    message,
+  )
+}
+
 function parseSingleTime(raw: string) {
   const match = raw.toLowerCase().match(/\b(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?\b/)
   if (!match) return undefined
@@ -371,7 +377,8 @@ function plannerReply(message: string, context: Required<RequestBody>["context"]
     .map((item) => item.content)
     .join(" ")
   const intentText = `${historyText} ${message}`
-  const date = parseDate(intentText, context.selectedDate ?? "2026-06-03")
+  const selectedDate = context.selectedDate ?? "2026-06-03"
+  const date = hasDateReference(message) ? parseDate(message, selectedDate) : parseDate(intentText, selectedDate)
   const attendees = parseAttendees(intentText)
   const range = parseTimeRange(message) ?? parseTimeRange(historyText)
   const duration = range ? minutes(range.end) - minutes(range.start) : parseDuration(intentText)
