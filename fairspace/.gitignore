@@ -16,3 +16,8 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+
+# Exported presentation and walkthrough docs
+FairSpace_Final_Round_Pitch.pptx
+FairSpace_Final_Round_Walkthrough_Script.docx
+~$irSpace_Final_Round_Walkthrough_Script.docx

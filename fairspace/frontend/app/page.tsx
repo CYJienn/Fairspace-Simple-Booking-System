@@ -252,7 +252,8 @@ const fallbackBookings: Booking[] = [
   },
 ]
 
-const dates = ["2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
+const todayIso = toIsoDate(new Date())
+const dates = Array.from({ length: 5 }, (_, index) => shiftIsoDate(todayIso, index))
 const times = [
   "09:00",
   "09:30",
@@ -493,17 +494,17 @@ export default function BookingSystemApp() {
 
   const organizer = profile.fullName || user?.user_metadata?.name || user?.email?.split("@")[0] || "Student"
   const end = addMinutes(start, duration)
-  const scopedMetricBookings = bookings.filter((booking) => {
-    if (booking.status === "cancelled") return false
+  const activeBookings = bookings.filter((booking) => booking.status !== "cancelled" && booking.date >= todayIso)
+
+  const scopedMetricBookings = activeBookings.filter((booking) => {
     if (portalRole === "admin") return true
     return booking.organizerId === profileId
   })
   const metricBookings = scopedMetricBookings.filter((booking) => booking.date >= yesterdayIso(now))
 
-  const visibleBookings = bookings
+  const visibleBookings = activeBookings
     .filter((booking) => {
       if (selectedScheduleDate && booking.date !== selectedScheduleDate) return false
-      if (booking.status === "cancelled") return false
       if (portalRole === "admin") return true
       return booking.organizerId === profileId
     })
@@ -1411,8 +1412,8 @@ export default function BookingSystemApp() {
                 <MiniMonthCalendar
                   selectedDate={selectedScheduleDate}
                   onSelectDate={setSelectedScheduleDate}
-                  markedDates={bookings
-                    .filter((booking) => booking.status !== "cancelled" && (portalRole === "admin" || booking.organizerId === profileId))
+                  markedDates={activeBookings
+                    .filter((booking) => portalRole === "admin" || booking.organizerId === profileId)
                     .map((booking) => booking.date)}
                 />
                 <div className="space-y-4">
