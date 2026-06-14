@@ -252,7 +252,8 @@ const fallbackBookings: Booking[] = [
   },
 ]
 
-const dates = ["2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
+const todayIso = toIsoDate(new Date())
+const dates = Array.from({ length: 5 }, (_, index) => shiftIsoDate(todayIso, index))
 const times = [
   "09:00",
   "09:30",
@@ -493,17 +494,17 @@ export default function BookingSystemApp() {
 
   const organizer = profile.fullName || user?.user_metadata?.name || user?.email?.split("@")[0] || "Student"
   const end = addMinutes(start, duration)
-  const scopedMetricBookings = bookings.filter((booking) => {
-    if (booking.status === "cancelled") return false
+  const activeBookings = bookings.filter((booking) => booking.status !== "cancelled" && booking.date >= todayIso)
+
+  const scopedMetricBookings = activeBookings.filter((booking) => {
     if (portalRole === "admin") return true
     return booking.organizerId === profileId
   })
   const metricBookings = scopedMetricBookings.filter((booking) => booking.date >= yesterdayIso(now))
 
-  const visibleBookings = bookings
+  const visibleBookings = activeBookings
     .filter((booking) => {
       if (selectedScheduleDate && booking.date !== selectedScheduleDate) return false
-      if (booking.status === "cancelled") return false
       if (portalRole === "admin") return true
       return booking.organizerId === profileId
     })
@@ -1411,8 +1412,8 @@ export default function BookingSystemApp() {
                 <MiniMonthCalendar
                   selectedDate={selectedScheduleDate}
                   onSelectDate={setSelectedScheduleDate}
-                  markedDates={bookings
-                    .filter((booking) => booking.status !== "cancelled" && (portalRole === "admin" || booking.organizerId === profileId))
+                  markedDates={activeBookings
+                    .filter((booking) => portalRole === "admin" || booking.organizerId === profileId)
                     .map((booking) => booking.date)}
                 />
                 <div className="space-y-4">
@@ -2353,13 +2354,19 @@ function MiniMonthCalendar({
             const iso = toIsoDate(day)
             const selected = selectedDate === iso
             const inMonth = day.getMonth() === visibleMonth.getMonth()
+            const isPastDate = iso < todayIso
             return (
               <button
                 key={iso}
                 type="button"
-                onClick={() => onSelectDate(iso)}
+                disabled={isPastDate}
+                onClick={() => {
+                  if (!isPastDate) onSelectDate(iso)
+                }}
                 className={cn(
-                  "flex h-10 flex-col items-center justify-center rounded-md text-sm transition hover:bg-[#edf4ef]",
+                  "flex h-10 flex-col items-center justify-center rounded-md text-sm transition",
+                  !isPastDate && "hover:bg-[#edf4ef]",
+                  isPastDate && "cursor-not-allowed opacity-35",
                   selected && "bg-[#173f3a] text-white hover:bg-[#173f3a]",
                   !selected && !inMonth && "text-[#a3aaa5]",
                 )}
@@ -2407,13 +2414,19 @@ function CalendarView({
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const markedDates =
     portalRole === "student"
-      ? bookings.filter((booking) => booking.status !== "cancelled" && booking.organizerId === profileId).map((booking) => booking.date)
+      ? bookings
+          .filter((booking) => booking.status !== "cancelled" && booking.organizerId === profileId && booking.date >= todayIso)
+          .map((booking) => booking.date)
       : []
   const activeRooms = rooms.filter((room) => {
     const searchText = `${room.name} ${room.building} ${room.floor} ${room.amenities.join(" ")}`.toLowerCase()
     return room.status === "available" && searchText.includes(roomSearch.toLowerCase())
   })
-  const goToAdjacentDate = (amount: number) => setSelectedDate(shiftIsoDate(selectedDate, amount))
+  const goToAdjacentDate = (amount: number) => {
+    const nextDate = shiftIsoDate(selectedDate, amount)
+    if (nextDate >= todayIso) setSelectedDate(nextDate)
+  }
+  const canGoBack = selectedDate > todayIso
   const roomName = (roomId: string) => rooms.find((room) => room.id === roomId)?.name ?? "Unknown room"
 
   return (
@@ -2440,7 +2453,7 @@ function CalendarView({
             />
           </div>
             <div className="grid grid-cols-[40px_1fr_40px] gap-2 sm:flex sm:items-center">
-              <Button variant="outline" size="icon" className="rounded-md" onClick={() => goToAdjacentDate(-1)} aria-label="Previous date" title="Previous date">
+              <Button variant="outline" size="icon" className="rounded-md" onClick={() => goToAdjacentDate(-1)} disabled={!canGoBack} aria-label="Previous date" title="Previous date">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <Button variant="outline" className="rounded-md" onClick={() => setDatePickerOpen(true)}>

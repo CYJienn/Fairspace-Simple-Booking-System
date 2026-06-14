@@ -318,7 +318,8 @@ function isBookingFollowUp(message: string, history: RequestBody["history"] = []
   if (!hasBookingContext(history)) return false
   return (
     parseTimeRange(message) !== undefined ||
-    /\b(yes|yeah|yep|ok|okay|please|can\?|can ah|can or not|that one|this one|best one|best option|recommended one|same one|go with|use that|choose that|2 hours?|two hours?|1 hour|one hour|from\s+\d|to\s+\d)\b/.test(lower)
+    hasDateReference(message) ||
+    /\b(yes|yeah|yep|ok|okay|please|can\?|can ah|can or not|that one|this one|best one|best option|recommended one|same one|go with|use that|choose that|instead|change to|correction|actually|i mean|same date|other date|not that one|not this one|2 hours?|two hours?|1 hour|one hour|from\s+\d|to\s+\d)\b/.test(lower)
   )
 }
 
@@ -327,8 +328,8 @@ function wantsToCreate(message: string, history: RequestBody["history"] = []) {
   if (/\b(don't|dont|do not|no need to|not yet|suggestions? first|suggest only|just suggest)\b/.test(lower)) return false
   return (
     /^(book|reserve|create)\b/.test(lower) ||
-    /\b(book me|book for me|allow me to book|want to book|i want to book|click button)\b/.test(lower) ||
-    (hasBookingContext(history) && /\b(yes|yes please|yep|yeah|ok|okay|please confirm|confirm it|go ahead|go with|best option|best one|recommended one|use that|choose that)\b/.test(lower)) ||
+    /\b(book me|book for me|allow me to book|want to book|i want to book|click button|book this slot|reserve this slot|create this booking|prepare the booking button|make it|save this slot)\b/.test(lower) ||
+    (hasBookingContext(history) && /\b(yes|yes please|yep|yeah|ok|okay|please confirm|confirm it|go ahead|go with|best option|best one|recommended one|use that|choose that|this one|that one|this slot|that slot|confirm slot)\b/.test(lower)) ||
     /\b(please|help me|can you)\s+(book|reserve|create)\s+(discussion\s+)?room\s+\d+\b/.test(lower) ||
     /\b(book|reserve|create)\s+(discussion\s+)?room\s+\d+\b/.test(lower)
   )
